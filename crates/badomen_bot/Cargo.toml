@@ -1,0 +1,11 @@
+
+[package]
+name = "badomen_bot"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+discord = { path = "../discord" }
+
+[profile.release]
+panic = "abort"

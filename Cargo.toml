@@ -1,0 +1,27 @@
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/discord",
+    "crates/badomen_bot"
+]
+
+[workspace.package]
+edition = "2021"
+version = "1.0.0"
+
+[workspace.dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
+serde_json = "1"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+webpki-roots = "1"
+getrandom = "0.4"
+
+[profile.release]
+lto = false
+codegen-units = 16
+strip = true
+opt-level = 2
+
+[profile.dev]
+debug = 0

@@ -1,0 +1,9 @@
+pub const GUILDS: u32 = 1 << 0;
+pub const GUILD_MEMBERS: u32 = 1 << 1;
+pub const GUILD_MODERATION: u32 = 1 << 2;
+pub const GUILD_EMOJIS_AND_STICKERS: u32 = 1 << 3;
+pub const GUILD_VOICE_STATES: u32 = 1 << 7;
+pub const GUILD_MESSAGES: u32 = 1 << 9;
+pub const GUILD_MESSAGE_REACTIONS: u32 = 1 << 10;
+pub const DIRECT_MESSAGES: u32 = 1 << 12;
+pub const MESSAGE_CONTENT: u32 = 1 << 15;

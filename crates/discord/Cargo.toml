@@ -1,0 +1,12 @@
+
+[package]
+name = "discord"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rustls.workspace = true
+webpki-roots.workspace = true
+getrandom.workspace = true
