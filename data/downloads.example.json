@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "id": "nouga-launcher",
+      "name": "Nouga Launcher",
+      "version": "1.0.0",
+      "file": "NougaLauncher-1.0.0.exe",
+      "description": "The official launcher for BadOmen Visuals.",
+      "platform": "Windows",
+      "sha256": "",
+      "hidden": false
+    }
+  ]
+}

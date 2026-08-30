@@ -7,7 +7,9 @@ use discord::{
     rest::RestClient,
     shutdown::install_handler,
 };
+use httpd::serve;
 use licensing::{ApiConfig, LicenseService, DEFAULT_OFFLINE_GRACE};
+use web::SiteConfig;
 
 use crate::{
     commands::{
@@ -18,6 +20,7 @@ use crate::{
         TicketBugVersionHandler, TicketClaimHandler, TicketCloseHandler, TicketCloseModalHandler,
         TicketCommand, TicketHoldHandler, TicketOpenHandler, TicketPanelHandler, TicketService,
     },
+    guard::HomeGuild,
     logs::{AuditEntry, Logger},
     scheduler::Scheduler,
     storage::{ConfigStore, GiveawayStore, PollStore, TicketStore, LOG_DEFAULT, LOG_SYSTEM},
@@ -25,6 +28,7 @@ use crate::{
 
 mod commands;
 mod diagnostics;
+mod guard;
 mod logs;
 mod scheduler;
 mod storage;
@@ -38,6 +42,15 @@ pub fn main() {
     let token = std::env::var("DISCORD_TOKEN").expect("Missing DISCORD_TOKEN in env file");
     let guild_id = std::env::var("GUILD_ID").expect("Missing GUILD_ID in env file");
     let product = std::env::var("PRODUCT_NAME").unwrap_or_else(|_| "BadOmen Visuals".to_string());
+    let owner_id = std::env::var("OWNER_ID").ok().filter(|id| !id.is_empty());
+    let home = Arc::new(HomeGuild::new(guild_id.clone()));
+
+    if owner_id.is_none() {
+        logs::warn(
+            "startup",
+            "OWNER_ID is not set, only the configured manager role will be able to issue licences",
+        );
+    }
 
     let rest = Arc::new(RestClient::new(token.clone()));
     let config = Arc::new(ConfigStore::open("data/config.json"));
@@ -60,7 +73,7 @@ pub fn main() {
         .expect("Unable to open the licence service"),
     );
 
-    start_license_api(licenses.clone(), &product);
+    start_http(licenses.clone(), &product);
 
     if let Ok(channel_id) = std::env::var("LOGS_CHANNEL_ID") {
         config.update(&guild_id, |c| {
@@ -91,6 +104,7 @@ pub fn main() {
         rest: rest.clone(),
         licenses: licenses.clone(),
         product: product.clone(),
+        owner_id: owner_id.clone(),
     };
 
     let pending_polls = polls.all_pending();
@@ -169,6 +183,7 @@ pub fn main() {
             config: config.clone(),
             logger: logger.clone(),
             product: product.clone(),
+            owner_id: owner_id.clone(),
         })
         .register_component(TicketPanelHandler {
             service: ticket_service.clone(),
@@ -248,7 +263,16 @@ pub fn main() {
     gateway.run(
         |GatewayEvent::Dispatch { name, data }| match parse_dispatch(&name, data) {
             Ok(Event::Ready) => logs::ready("gateway", "connected and listening"),
-            Ok(Event::InteractionCreate(interaction)) => registry.dispatch(&rest, &interaction),
+            Ok(Event::GuildCreate { id, name }) => {
+                home.enforce_membership(&rest, &id, name.as_deref())
+            }
+            Ok(Event::InteractionCreate(interaction)) => {
+                if home.accepts(&interaction) {
+                    registry.dispatch(&rest, &interaction);
+                } else {
+                    home.refuse(&rest, &interaction);
+                }
+            }
             Ok(Event::Unknown { name }) => {
                 logs::debug("gateway", format!("unhandled event {name}"))
             }
@@ -266,35 +290,103 @@ pub fn main() {
     logs::info("shutdown", "stopped cleanly");
 }
 
-fn start_license_api(licenses: Arc<LicenseService>, product: &str) {
-    let addr = std::env::var("LICENSE_API_ADDR").unwrap_or_else(|_| "127.0.0.1:8787".to_string());
-    let admin_token = std::env::var("LICENSE_API_TOKEN")
-        .ok()
-        .filter(|value| value.len() >= 24);
+fn start_http(licenses: Arc<LicenseService>, product: &str) {
+    let api_addr =
+        std::env::var("LICENSE_API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+    let web_addr = std::env::var("WEB_ADDR").unwrap_or_else(|_| api_addr.clone());
+    let website_enabled = !std::env::var("WEB_ENABLED").is_ok_and(|value| value == "false");
 
-    if admin_token.is_none() {
+    let api_config = Arc::new(ApiConfig {
+        addr: api_addr.clone(),
+        admin_token: std::env::var("LICENSE_API_TOKEN")
+            .ok()
+            .filter(|value| value.len() >= 24),
+        product: product.to_string(),
+    });
+
+    if api_config.admin_token.is_none() {
         logs::warn(
             "licence-api",
             "LICENSE_API_TOKEN is missing or shorter than 24 characters, the admin endpoints stay disabled",
         );
     }
 
-    let config = ApiConfig {
-        addr: addr.clone(),
-        admin_token,
-        product: product.to_string(),
-    };
-
-    match licensing::spawn_api(licenses.clone(), config) {
-        Ok(local) => {
-            logs::ready("licence-api", format!("listening on http://{local}"));
-            logs::info(
-                "licence-api",
-                format!("ed25519 public key {}", licenses.public_key_hex()),
-            );
+    if !website_enabled {
+        logs::info("website", "disabled by WEB_ENABLED");
+        match licensing::spawn_api(
+            licenses.clone(),
+            ApiConfig {
+                addr: api_addr.clone(),
+                admin_token: api_config.admin_token.clone(),
+                product: product.to_string(),
+            },
+        ) {
+            Ok(local) => announce_api(&licenses, local),
+            Err(e) => logs::error("licence-api", format!("cannot bind {api_addr}: {e}")),
         }
-        Err(e) => logs::error("licence-api", format!("cannot bind {addr}: {e}")),
+        return;
     }
+
+    let site = Arc::new(site_config(&web_addr, product));
+    if let Err(e) = web::prepare(&site) {
+        logs::error("website", format!("cannot prepare the files folder: {e}"));
+    }
+
+    if web_addr == api_addr {
+        let api = licensing::http::router(licenses.clone(), api_config);
+        let pages = web::router(site);
+
+        match serve(web::server_config(api_addr.clone()), move |request| {
+            api(request).unwrap_or_else(|| pages(request))
+        }) {
+            Ok(local) => {
+                logs::ready("http", format!("site and licence api on http://{local}"));
+                announce_api(&licenses, local);
+            }
+            Err(e) => logs::error("http", format!("cannot bind {api_addr}: {e}")),
+        }
+        return;
+    }
+
+    match licensing::spawn_api(
+        licenses.clone(),
+        ApiConfig {
+            addr: api_addr.clone(),
+            admin_token: api_config.admin_token.clone(),
+            product: product.to_string(),
+        },
+    ) {
+        Ok(local) => announce_api(&licenses, local),
+        Err(e) => logs::error("licence-api", format!("cannot bind {api_addr}: {e}")),
+    }
+
+    let addr = site.addr.clone();
+    let pages = web::router(site);
+    match serve(web::server_config(addr.clone()), move |request| {
+        pages(request)
+    }) {
+        Ok(local) => logs::ready("website", format!("listening on http://{local}")),
+        Err(e) => logs::error("website", format!("cannot bind {addr}: {e}")),
+    }
+}
+
+fn site_config(addr: &str, product: &str) -> SiteConfig {
+    SiteConfig::new(
+        addr,
+        std::env::var("SITE_NAME").unwrap_or_else(|_| product.to_string()),
+    )
+    .public(std::env::var("WEB_PUBLIC_DIR").unwrap_or_else(|_| "public".to_string()))
+    .files(std::env::var("WEB_FILES_DIR").unwrap_or_else(|_| "files".to_string()))
+    .manifest("data/downloads.json")
+    .discord(std::env::var("DISCORD_INVITE_URL").ok())
+}
+
+fn announce_api(licenses: &LicenseService, local: std::net::SocketAddr) {
+    logs::ready("licence-api", format!("licence api on http://{local}/v1"));
+    logs::info(
+        "licence-api",
+        format!("ed25519 public key {}", licenses.public_key_hex()),
+    );
 }
 
 fn load_dotenv(path: &str) {

@@ -1,23 +1,12 @@
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
+use httpd::{serve, Request, Response, ServerConfig};
 use serde_json::{json, Value};
 
 use crate::crypto::constant_time_eq;
 use crate::model::{License, LicenseError};
 use crate::service::{now_secs, IssueRequest, LicenseService};
-
-const MAX_BODY: usize = 64 * 1024;
-const MAX_HEAD: usize = 16 * 1024;
-const RATE_WINDOW: u64 = 60;
-const RATE_LIMIT: u32 = 120;
-const IO_TIMEOUT: Duration = Duration::from_secs(8);
-const MAX_CONNECTIONS: usize = 64;
 
 pub struct ApiConfig {
     pub addr: String,
@@ -25,127 +14,49 @@ pub struct ApiConfig {
     pub product: String,
 }
 
-struct Request {
-    method: String,
-    path: String,
-    headers: HashMap<String, String>,
-    body: Vec<u8>,
-}
-
-impl Request {
-    fn json(&self) -> Option<Value> {
-        serde_json::from_slice(&self.body).ok()
-    }
-
-    fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(name).map(String::as_str)
-    }
-}
-
-struct ConnectionGuard(Arc<AtomicUsize>);
-
-impl Drop for ConnectionGuard {
-    fn drop(&mut self) {
-        self.0.fetch_sub(1, Ordering::SeqCst);
-    }
-}
-
-struct Limiter {
-    hits: Mutex<HashMap<String, (u64, u32)>>,
-}
-
-impl Limiter {
-    fn new() -> Self {
-        Self {
-            hits: Mutex::new(HashMap::new()),
-        }
-    }
-
-    fn allow(&self, client: &str) -> bool {
-        let now = now_secs();
-        let mut hits = self.hits.lock().unwrap_or_else(|e| e.into_inner());
-
-        hits.retain(|_, (start, _)| now.saturating_sub(*start) < RATE_WINDOW * 2);
-
-        let entry = hits.entry(client.to_string()).or_insert((now, 0));
-        if now.saturating_sub(entry.0) >= RATE_WINDOW {
-            *entry = (now, 0);
-        }
-        entry.1 += 1;
-        entry.1 <= RATE_LIMIT
+pub fn router(
+    service: Arc<LicenseService>,
+    config: Arc<ApiConfig>,
+) -> impl Fn(&Request) -> Option<Response> + Send + Sync + 'static {
+    let started = now_secs();
+    move |request| {
+        request
+            .path
+            .starts_with("/v1")
+            .then(|| route(request, &service, &config, started))
     }
 }
 
 pub fn spawn(service: Arc<LicenseService>, config: ApiConfig) -> std::io::Result<SocketAddr> {
-    let listener = TcpListener::bind(&config.addr)?;
-    let local = listener.local_addr()?;
-    let limiter = Arc::new(Limiter::new());
+    let addr = config.addr.clone();
     let config = Arc::new(config);
-    let started = now_secs();
-    let live = Arc::new(AtomicUsize::new(0));
+    let index = index_of(&config);
+    let handler = router(service, config);
 
-    thread::Builder::new()
-        .name("licence-api".to_string())
-        .spawn(move || {
-            for incoming in listener.incoming() {
-                let Ok(mut stream) = incoming else {
-                    continue;
-                };
-
-                if live.load(Ordering::SeqCst) >= MAX_CONNECTIONS {
-                    let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-                    write_response(&mut stream, 503, &json!({"error": "busy"}));
-                    continue;
-                }
-
-                live.fetch_add(1, Ordering::SeqCst);
-                let guard = ConnectionGuard(live.clone());
-                let service = service.clone();
-                let limiter = limiter.clone();
-                let config = config.clone();
-
-                let worker = thread::Builder::new().stack_size(196_608).spawn(move || {
-                    let _guard = guard;
-                    handle(stream, &service, &limiter, &config, started);
-                });
-
-                if worker.is_err() {
-                    eprintln!("licence api: unable to spawn a worker thread");
-                    live.fetch_sub(1, Ordering::SeqCst);
-                }
+    serve(
+        ServerConfig::new(addr, "licence-api").rate_limit(120, 60),
+        move |request| {
+            if request.is("GET", "/") {
+                return Response::json(200, &index);
             }
-        })?;
-
-    Ok(local)
+            handler(request).unwrap_or_else(Response::not_found)
+        },
+    )
 }
 
-fn handle(
-    mut stream: TcpStream,
-    service: &LicenseService,
-    limiter: &Limiter,
-    config: &ApiConfig,
-    started: u64,
-) {
-    let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
-    let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-
-    let client = stream
-        .peer_addr()
-        .map(|addr| addr.ip().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
-
-    if !limiter.allow(&client) {
-        write_response(&mut stream, 429, &json!({"error": "rate_limited"}));
-        return;
-    }
-
-    let Some(request) = read_request(&mut stream) else {
-        write_response(&mut stream, 400, &json!({"error": "bad_request"}));
-        return;
-    };
-
-    let (status, body) = route(&request, service, config, started);
-    write_response(&mut stream, status, &body);
+fn index_of(config: &ApiConfig) -> Value {
+    json!({
+        "service": "badomen-licensing",
+        "product": config.product,
+        "version": 1,
+        "endpoints": [
+            "GET /v1/health",
+            "GET /v1/public-key",
+            "POST /v1/activate",
+            "POST /v1/validate",
+            "POST /v1/refresh"
+        ]
+    })
 }
 
 fn route(
@@ -153,48 +64,47 @@ fn route(
     service: &LicenseService,
     config: &ApiConfig,
     started: u64,
-) -> (u16, Value) {
-    let method = request.method.as_str();
-    let path = request.path.as_str();
+) -> Response {
+    if request.is("GET", "/v1") || request.is("GET", "/v1/") {
+        return Response::json(200, &index_of(config));
+    }
 
-    match (method, path) {
-        ("GET", "/") | ("GET", "/v1") => (
+    if request.is("GET", "/v1/health") {
+        return Response::json(
             200,
-            json!({
-                "service": "badomen-licensing",
-                "product": config.product,
-                "version": 1,
-                "endpoints": [
-                    "GET /v1/health",
-                    "GET /v1/public-key",
-                    "POST /v1/activate",
-                    "POST /v1/validate",
-                    "POST /v1/refresh"
-                ]
-            }),
-        ),
-        ("GET", "/v1/health") => (
+            &json!({"status": "ok", "uptime": now_secs().saturating_sub(started)}),
+        );
+    }
+
+    if request.is("GET", "/v1/public-key") {
+        return Response::json(
             200,
-            json!({"status": "ok", "uptime": now_secs().saturating_sub(started)}),
-        ),
-        ("GET", "/v1/public-key") => (
-            200,
-            json!({
+            &json!({
                 "algorithm": "ed25519",
                 "public_key_hex": service.public_key_hex(),
                 "public_key_base64url": service.public_key_base64(),
                 "offline_grace_seconds": service.offline_grace()
             }),
-        ),
-        ("POST", "/v1/activate") => activate(request, service),
-        ("POST", "/v1/validate") => validate(request, service),
-        ("POST", "/v1/refresh") => refresh(request, service),
-        _ if path.starts_with("/v1/admin") => admin(request, service, config),
-        _ => (404, json!({"error": "not_found"})),
+        );
     }
+
+    if request.is("POST", "/v1/activate") {
+        return activate(request, service);
+    }
+    if request.is("POST", "/v1/validate") {
+        return validate(request, service);
+    }
+    if request.is("POST", "/v1/refresh") {
+        return refresh(request, service);
+    }
+    if request.path.starts_with("/v1/admin") {
+        return admin(request, service, config);
+    }
+
+    Response::not_found()
 }
 
-fn activate(request: &Request, service: &LicenseService) -> (u16, Value) {
+fn activate(request: &Request, service: &LicenseService) -> Response {
     let Some(payload) = request.json() else {
         return failure(LicenseError::InvalidRequest);
     };
@@ -203,9 +113,9 @@ fn activate(request: &Request, service: &LicenseService) -> (u16, Value) {
     };
 
     match service.activate(&key, &hwid) {
-        Ok((license, token)) => (
+        Ok((license, token)) => Response::json(
             200,
-            json!({
+            &json!({
                 "status": license.status(now_secs()).as_str(),
                 "licence": public_view(&license),
                 "token": token.token,
@@ -217,7 +127,7 @@ fn activate(request: &Request, service: &LicenseService) -> (u16, Value) {
     }
 }
 
-fn validate(request: &Request, service: &LicenseService) -> (u16, Value) {
+fn validate(request: &Request, service: &LicenseService) -> Response {
     let Some(payload) = request.json() else {
         return failure(LicenseError::InvalidRequest);
     };
@@ -229,11 +139,11 @@ fn validate(request: &Request, service: &LicenseService) -> (u16, Value) {
                     .map(|hwid| hwid == claims.hwid)
                     .unwrap_or(true);
                 if matching {
-                    (
+                    Response::json(
                         200,
-                        json!({
+                        &json!({
                             "status": "valid",
-                            "key": claims.key,
+                            "key_prefix": claims.key_prefix,
                             "product": claims.product,
                             "plan": claims.plan,
                             "expires_at": claims.expires_at,
@@ -253,15 +163,15 @@ fn validate(request: &Request, service: &LicenseService) -> (u16, Value) {
     };
 
     match service.validate(&key, &hwid) {
-        Ok(license) => (
+        Ok(license) => Response::json(
             200,
-            json!({"status": "valid", "licence": public_view(&license)}),
+            &json!({"status": "valid", "licence": public_view(&license)}),
         ),
         Err(e) => failure(e),
     }
 }
 
-fn refresh(request: &Request, service: &LicenseService) -> (u16, Value) {
+fn refresh(request: &Request, service: &LicenseService) -> Response {
     let Some(payload) = request.json() else {
         return failure(LicenseError::InvalidRequest);
     };
@@ -270,9 +180,9 @@ fn refresh(request: &Request, service: &LicenseService) -> (u16, Value) {
     };
 
     match service.refresh(&key, &hwid) {
-        Ok((license, token)) => (
+        Ok((license, token)) => Response::json(
             200,
-            json!({
+            &json!({
                 "status": license.status(now_secs()).as_str(),
                 "token": token.token,
                 "expires_at": token.expires_at,
@@ -283,31 +193,23 @@ fn refresh(request: &Request, service: &LicenseService) -> (u16, Value) {
     }
 }
 
-fn admin(request: &Request, service: &LicenseService, config: &ApiConfig) -> (u16, Value) {
+fn admin(request: &Request, service: &LicenseService, config: &ApiConfig) -> Response {
     let Some(expected) = config.admin_token.as_deref() else {
-        return (503, json!({"error": "admin_api_disabled"}));
+        return Response::json(503, &json!({"error": "admin_api_disabled"}));
     };
 
-    let presented = request
-        .header("authorization")
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .unwrap_or("");
-
-    if !constant_time_eq(presented, expected) {
-        return (401, json!({"error": "unauthorized"}));
+    if !constant_time_eq(request.bearer().unwrap_or(""), expected) {
+        return Response::json(401, &json!({"error": "unauthorized"}));
     }
 
-    let path = request.path.as_str();
-    let method = request.method.as_str();
-
-    if method == "GET" && path == "/v1/admin/stats" {
-        return (
+    if request.is("GET", "/v1/admin/stats") {
+        return Response::json(
             200,
-            serde_json::to_value(service.stats()).unwrap_or_default(),
+            &serde_json::to_value(service.stats()).unwrap_or_default(),
         );
     }
 
-    if method == "POST" && path == "/v1/admin/licenses" {
+    if request.is("POST", "/v1/admin/licenses") {
         let Some(payload) = request.json() else {
             return failure(LicenseError::InvalidRequest);
         };
@@ -332,18 +234,18 @@ fn admin(request: &Request, service: &LicenseService, config: &ApiConfig) -> (u1
         let issued = service.issue(issue);
         let mut view = admin_view(&issued.license);
         view["key"] = Value::String(issued.key);
-        return (201, view);
+        return Response::json(201, &view);
     }
 
-    let Some(rest) = path.strip_prefix("/v1/admin/licenses/") else {
-        return (404, json!({"error": "not_found"}));
+    let Some(rest) = request.path.strip_prefix("/v1/admin/licenses/") else {
+        return Response::not_found();
     };
     let (key, action) = match rest.split_once('/') {
         Some((key, action)) => (key, action),
         None => (rest, ""),
     };
 
-    let outcome = match (method, action) {
+    let outcome = match (request.method.as_str(), action) {
         ("GET", "") => service.resolve(key),
         ("POST", "revoke") => service.revoke(
             key,
@@ -358,19 +260,19 @@ fn admin(request: &Request, service: &LicenseService, config: &ApiConfig) -> (u1
                 .as_ref()
                 .and_then(|p| string_of(p, "owner_id")),
         ),
-        _ => return (404, json!({"error": "not_found"})),
+        _ => return Response::not_found(),
     };
 
     match outcome {
-        Ok(license) => (200, admin_view(&license)),
+        Ok(license) => Response::json(200, &admin_view(&license)),
         Err(e) => failure(e),
     }
 }
 
-fn failure(error: LicenseError) -> (u16, Value) {
-    (
+fn failure(error: LicenseError) -> Response {
+    Response::json(
         error.http_status(),
-        json!({"error": error.code(), "message": error.message()}),
+        &json!({"error": error.code(), "message": error.message()}),
     )
 }
 
@@ -425,89 +327,4 @@ fn string_of(payload: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(String::from)
-}
-
-fn read_request(stream: &mut TcpStream) -> Option<Request> {
-    let mut buffer = Vec::with_capacity(1024);
-    let mut chunk = [0u8; 1024];
-
-    let head_end = loop {
-        if let Some(position) = find_head_end(&buffer) {
-            break position;
-        }
-        if buffer.len() > MAX_HEAD {
-            return None;
-        }
-        let read = stream.read(&mut chunk).ok()?;
-        if read == 0 {
-            return None;
-        }
-        buffer.extend_from_slice(&chunk[..read]);
-    };
-
-    let head = std::str::from_utf8(&buffer[..head_end]).ok()?;
-    let mut lines = head.split("\r\n");
-    let mut request_line = lines.next()?.split_whitespace();
-
-    let method = request_line.next()?.to_ascii_uppercase();
-    let target = request_line.next()?;
-    let path = target.split('?').next().unwrap_or(target).to_string();
-
-    let mut headers = HashMap::new();
-    for line in lines {
-        if let Some((name, value)) = line.split_once(':') {
-            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_string());
-        }
-    }
-
-    let length = headers
-        .get("content-length")
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(0)
-        .min(MAX_BODY);
-
-    let mut body = buffer[head_end + 4..].to_vec();
-    while body.len() < length {
-        let read = stream.read(&mut chunk).ok()?;
-        if read == 0 {
-            break;
-        }
-        body.extend_from_slice(&chunk[..read]);
-    }
-    body.truncate(length);
-
-    Some(Request {
-        method,
-        path,
-        headers,
-        body,
-    })
-}
-
-fn find_head_end(buffer: &[u8]) -> Option<usize> {
-    buffer.windows(4).position(|window| window == b"\r\n\r\n")
-}
-
-fn write_response(stream: &mut TcpStream, status: u16, body: &Value) {
-    let payload = serde_json::to_vec(body).unwrap_or_else(|_| b"{}".to_vec());
-    let reason = match status {
-        200 => "OK",
-        201 => "Created",
-        400 => "Bad Request",
-        401 => "Unauthorized",
-        403 => "Forbidden",
-        404 => "Not Found",
-        429 => "Too Many Requests",
-        503 => "Service Unavailable",
-        _ => "Error",
-    };
-
-    let head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",
-        payload.len()
-    );
-
-    let _ = stream.write_all(head.as_bytes());
-    let _ = stream.write_all(&payload);
-    let _ = stream.flush();
 }

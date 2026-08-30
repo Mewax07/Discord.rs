@@ -2,9 +2,7 @@ use std::sync::Arc;
 
 use discord::commands::{CommandContext, SlashCommand};
 use discord::error::Result;
-use discord::models::{
-    CommandDefinition, CommandOption, Component, MessagePayload, User, PERM_ADMINISTRATOR,
-};
+use discord::models::{CommandDefinition, CommandOption, Component, MessagePayload, User};
 use licensing::{IssueRequest, License, LicenseService};
 
 use crate::logs::{self, AuditEntry, Logger};
@@ -36,6 +34,28 @@ pub struct LicenseCommand {
     pub config: Arc<ConfigStore>,
     pub logger: Arc<Logger>,
     pub product: String,
+    pub owner_id: Option<String>,
+}
+
+pub fn may_issue(
+    ctx: &CommandContext,
+    config: &ConfigStore,
+    owner_id: Option<&str>,
+    guild_id: &str,
+) -> bool {
+    let Some(author) = ctx.author() else {
+        return false;
+    };
+
+    if owner_id == Some(author.id.as_str()) {
+        return true;
+    }
+
+    config
+        .get(guild_id)
+        .manager_role_id
+        .map(|role_id| ctx.has_role(&role_id))
+        .unwrap_or(false)
 }
 
 impl SlashCommand for LicenseCommand {
@@ -47,7 +67,7 @@ impl SlashCommand for LicenseCommand {
 
         CommandDefinition::new("license", "Issue and manage product licences")
             .guild_only()
-            .required_permissions(PERM_ADMINISTRATOR)
+            .required_permissions(0)
             .option(
                 CommandOption::subcommand("create", "Generate a new licence key")
                     .option(plan)
@@ -104,10 +124,10 @@ impl SlashCommand for LicenseCommand {
                 "This command can only be used inside a server.",
             ));
         };
-        if !ctx.has_permission(PERM_ADMINISTRATOR) {
+        if !may_issue(ctx, &self.config, self.owner_id.as_deref(), guild_id) {
             return ctx.reply_widget_hidden(ui::fail(
                 "Not allowed",
-                "Only administrators can manage licences.",
+                "Licences are issued by the owner and the manager role only. Ask them if you need a key.",
             ));
         }
 

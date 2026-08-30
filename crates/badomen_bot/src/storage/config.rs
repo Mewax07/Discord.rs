@@ -62,6 +62,8 @@ pub struct GuildConfig {
     #[serde(default)]
     pub member_role_id: Option<String>,
     #[serde(default)]
+    pub manager_role_id: Option<String>,
+    #[serde(default)]
     pub self_roles: HashMap<String, String>,
     #[serde(default)]
     pub log_channels: HashMap<String, String>,
@@ -92,6 +94,7 @@ impl Default for GuildConfig {
             ticket_transcripts: true,
             ticket_dm_summary: true,
             member_role_id: None,
+            manager_role_id: None,
             self_roles: HashMap::new(),
             log_channels: HashMap::new(),
             rules: Vec::new(),

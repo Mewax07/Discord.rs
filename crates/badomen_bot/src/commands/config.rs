@@ -97,6 +97,15 @@ impl SlashCommand for ConfigCommand {
                     ),
             )
             .option(
+                CommandOption::group("licensing", "Who is allowed to issue licence keys").option(
+                    CommandOption::subcommand(
+                        "manager-role",
+                        "Role allowed to issue keys alongside the owner",
+                    )
+                    .option(CommandOption::role("role", "Manager role").required(true)),
+                ),
+            )
+            .option(
                 CommandOption::group("logs", "Where each log category is delivered")
                     .option(
                         CommandOption::subcommand("set", "Route a log category to a channel")
@@ -170,6 +179,7 @@ impl SlashCommand for ConfigCommand {
             (None, Some("view")) => self.view(ctx, guild_id),
             (Some("tickets"), Some(action)) => self.tickets(ctx, guild_id, action),
             (Some("rules"), Some(action)) => self.rules(ctx, guild_id, action),
+            (Some("licensing"), Some("manager-role")) => self.manager_role(ctx, guild_id),
             (Some("logs"), Some(action)) => self.logs(ctx, guild_id, action),
             (Some("selfroles"), Some(action)) => self.selfroles(ctx, guild_id, action),
             (Some("brand"), Some(action)) => self.brand(ctx, guild_id, action),
@@ -229,6 +239,7 @@ impl ConfigCommand {
         let community = vec![
             ui::kv("Rules channel", optional_channel(&cfg.rules_channel_id)),
             ui::kv("Member role", optional_role(&cfg.member_role_id)),
+            ui::kv("Licence managers", optional_role(&cfg.manager_role_id)),
             ui::kv(
                 "Stored rules",
                 if cfg.rules.is_empty() {
@@ -439,6 +450,24 @@ impl ConfigCommand {
                 ctx.reply_widget_hidden(ui::fail("Unknown action", "This setting does not exist."))
             }
         }
+    }
+
+    fn manager_role(&self, ctx: &CommandContext, guild_id: &str) -> Result<()> {
+        let Some(role) = ctx.option_role("role") else {
+            return ctx.reply_widget_hidden(ui::fail("Not found", "Role not resolved."));
+        };
+        let id = role.id.clone();
+        self.config
+            .update(guild_id, |c| c.manager_role_id = Some(id.clone()));
+        self.saved(
+            ctx,
+            guild_id,
+            "Manager role",
+            format!(
+                "{} can now issue licence keys, alongside the owner. Grant the role access to the command in Server Settings, Integrations.",
+                role.mention()
+            ),
+        )
     }
 
     fn logs(&self, ctx: &CommandContext, guild_id: &str, action: &str) -> Result<()> {

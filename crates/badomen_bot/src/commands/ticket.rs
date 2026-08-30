@@ -341,6 +341,12 @@ fn panel_widget(theme: &Theme, cfg: &GuildConfig) -> Vec<Component> {
     ));
     body.push(ui::divider());
 
+    body.push(ui::section_thumb(
+        vec![],
+        "https://raw.githubusercontent.com/Mewax07/Discord.rs/main/assets/main/ticket_banner.gif",
+    ));
+    body.push(ui::divider());
+
     body.push(ui::text(ui::bullets(&[
         "One ticket per issue keeps the history readable".to_string(),
         "Describe what happens, what you expected and how to reproduce it".to_string(),

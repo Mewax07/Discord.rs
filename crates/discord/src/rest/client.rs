@@ -253,6 +253,12 @@ impl RestClient {
         Ok(serde_json::from_value(value)?)
     }
 
+    pub fn leave_guild(&self, guild_id: &str) -> Result<()> {
+        let path = format!("{API}/users/@me/guilds/{guild_id}");
+        self.http.delete(&path, &self.token)?;
+        Ok(())
+    }
+
     pub fn add_member_role(&self, guild_id: &str, user_id: &str, role_id: &str) -> Result<()> {
         let path = format!("{API}/guilds/{guild_id}/members/{user_id}/roles/{role_id}");
         self.http

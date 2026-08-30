@@ -6,8 +6,11 @@
 **/*.rs.bk
 
 data/*
-!data/config.json
 !data/config.example.json
+!data/downloads.example.json
+
+files/*
+!files/.gitkeep
 
 *.pk8
 *.pem

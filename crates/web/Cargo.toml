@@ -1,5 +1,5 @@
 [package]
-name = "licensing"
+name = "web"
 version.workspace = true
 edition.workspace = true
 
@@ -7,5 +7,6 @@ edition.workspace = true
 httpd = { path = "../httpd" }
 serde.workspace = true
 serde_json.workspace = true
-getrandom.workspace = true
-ring.workspace = true
+
+[dev-dependencies]
+licensing = { path = "../licensing" }

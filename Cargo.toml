@@ -3,7 +3,9 @@
 resolver = "2"
 members = [
     "crates/discord",
+    "crates/httpd",
     "crates/licensing",
+    "crates/web",
     "crates/badomen_bot"
 ]
 

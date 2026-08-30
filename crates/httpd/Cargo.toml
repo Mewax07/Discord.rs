@@ -1,11 +1,8 @@
 [package]
-name = "licensing"
+name = "httpd"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-httpd = { path = "../httpd" }
 serde.workspace = true
 serde_json.workspace = true
-getrandom.workspace = true
-ring.workspace = true

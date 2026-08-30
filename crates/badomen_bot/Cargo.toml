@@ -6,7 +6,9 @@ edition.workspace = true
 
 [dependencies]
 discord = { path = "../discord" }
+httpd = { path = "../httpd" }
 licensing = { path = "../licensing" }
+web = { path = "../web" }
 serde.workspace = true
 serde_json.workspace = true
 getrandom.workspace = true

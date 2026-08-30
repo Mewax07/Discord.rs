@@ -7,10 +7,12 @@ A Discord bot and a licence server for the BadOmen products, written in Rust wit
 | Crate | Role |
 | --- | --- |
 | `crates/discord` | Discord gateway, REST client, models, components v2, slash command registry |
-| `crates/licensing` | Licence issuing, Ed25519 signing, HWID binding, HTTP API |
+| `crates/httpd` | Minimal HTTP/1.1 server: routing, connection cap, rate limit, file streaming |
+| `crates/licensing` | Licence issuing, Ed25519 signing, HWID binding, licence API |
+| `crates/web` | Static site from `public/`, plus manifest driven downloads |
 | `crates/badomen_bot` | Tickets, rules, self roles, polls, giveaways, moderation, configuration |
 
-Everything runs in a single process: the bot connects to the gateway while the licence API listens on its own port.
+Everything runs in a single process: the bot holds the gateway connection while the download site and the licence API answer on one HTTP port, the site owning the root and the API everything under `/v1`. Give `WEB_ADDR` a different value than `LICENSE_API_ADDR` to split them across two ports instead.
 
 ## Requirements
 
@@ -41,6 +43,19 @@ cargo run --release
 
 Slash commands are registered on the guild at startup, so they appear immediately.
 
+## Single server
+
+The bot answers on one server only, the one named by `GUILD_ID`. Interactions coming from anywhere else, direct messages included, are refused with an ephemeral message, and the bot leaves any other server it is invited to as soon as it joins. Slash commands are registered on that guild alone, so they never appear elsewhere.
+
+## Who can issue licences
+
+Licence keys are not tied to the Administrator permission. Only two parties can create them:
+
+- the account named by `OWNER_ID`
+- anyone holding the role set with `/config licensing manager-role`
+
+That covers `/license create` and giveaways paying out keys. The command ships with `default_member_permissions` at zero, so grant it to the manager role in Server Settings, Integrations to make it visible to them.
+
 ## Configuration
 
 Everything is configured from Discord, nothing is hardcoded. `/config view` shows the full state of the server and lists what is still missing.
@@ -52,6 +67,7 @@ Everything is configured from Discord, nothing is hardcoded. `/config view` show
 | `/config logs` | Route each log category to a channel |
 | `/config selfroles` | Map a panel entry to a real role |
 | `/config brand` | Name, accent colour, logo, banner and footer of every widget |
+| `/config licensing` | Role allowed to issue licence keys next to the owner |
 
 ## Commands
 
@@ -64,12 +80,39 @@ Everything is configured from Discord, nothing is hardcoded. `/config view` show
 | `/poll create`, `/poll end` | Administrator | Native Discord polls |
 | `/giveaway` | Administrator | Giveaways, optionally paying out licence keys |
 | `/clear` | Administrator | Delete recent messages, with member and bot filters |
-| `/license` | Administrator | Issue, inspect, revoke and reassign licences |
+| `/license` | Owner or manager role | Issue, inspect, revoke and reassign licences |
 | `/config` | Manage Server | Everything above |
+
+## Download site
+
+The site listens on `WEB_ADDR` (`127.0.0.1:8080` by default, shared with the licence API) and is made of two separate trees:
+
+| Folder | Contents | Exposure |
+| --- | --- | --- |
+| `public/` | `index.html`, `style.css`, `app.js`, images, fonts | served as is, every file is reachable by URL |
+| `files/` | the binaries you hand out | reachable only through `/d/{id}`, and only when declared in `data/downloads.json` |
+
+That split is deliberate: put a binary in `public/` and it becomes downloadable by direct URL, which defeats the manifest. Keep releases in `files/`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /` | `public/index.html`, or a built in page when you have not written one yet |
+| `GET /style.css`, `/app.js`, … | any file under `public/` |
+| `GET /d/{id}` | download one manifest entry, streamed from `files/` |
+| `GET /downloads.json` | the release list your front end renders |
+| `GET /health` | liveness |
+
+The shipped `public/` carries the BadOmen identity: dark background, mint accent, Rival Sans and Akony. Drop `Logo2.svg`, `SRegular-RvFix20260627.ttf`, `SMedium-RvFix20260627.ttf` and `Akony.ttf` into `public/assets/` to get the real branding, the page falls back to system fonts without them. Preview the site alone with `cargo run -p web --example preview`.
+
+The hero runs the GhostFibers shader in WebGL2, ported to plain JavaScript in `public/ghost-fibers.js`, no npm and no CDN. It pauses itself when scrolled out of view, when the tab is hidden and when the visitor asks for reduced motion, and the page falls back to the grid background when WebGL2 is missing. Its settings live in the `mountGhostFibers` call at the bottom of `public/app.js`.
+
+Edit `public/` with any editor and reload the page, nothing is compiled in. `public/404.html` replaces the built in not found page when present. The shipped `app.js` fetches `/downloads.json` and renders the cards, so adding a release means dropping the file in `files/` and adding an entry to `data/downloads.json`, no restart and no rebuild.
+
+Path traversal is refused on both trees: URL segments containing `..`, a backslash, a colon or a leading dot are rejected outright, and every resolved path is canonicalised then checked to sit inside its root. Downloads stream in 64 KB chunks, so a large launcher never sits in memory. Set `WEB_ENABLED=false` to run the bot without the site.
 
 ## Licence API
 
-The server listens on `LICENSE_API_ADDR` (`127.0.0.1:8787` by default).
+The API answers on `LICENSE_API_ADDR` (`127.0.0.1:8080` by default), under the `/v1` prefix. When `WEB_ADDR` matches it, one server carries both: the download page on `/`, the API on `/v1`, which keeps deployment down to a single port, a single vhost and a single certificate.
 
 | Endpoint | Auth | Purpose |
 | --- | --- | --- |

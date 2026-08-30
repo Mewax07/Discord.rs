@@ -9,7 +9,7 @@ use discord::models::{
 use discord::rest::RestClient;
 use licensing::{IssueRequest, LicenseService};
 
-use crate::commands::license::{plan_days, plan_exists, PLANS};
+use crate::commands::license::{may_issue, plan_days, plan_exists, PLANS};
 use crate::logs::{self, AuditEntry, Logger};
 use crate::scheduler::Scheduler;
 use crate::storage::{ConfigStore, GiveawayRecord, GiveawayStore, LOG_GIVEAWAYS};
@@ -33,6 +33,7 @@ pub struct GiveawayService {
     pub rest: Arc<RestClient>,
     pub licenses: Arc<LicenseService>,
     pub product: String,
+    pub owner_id: Option<String>,
 }
 
 impl GiveawayService {
@@ -135,6 +136,17 @@ impl SlashCommand for GiveawayCommand {
         let reward_plan = ctx.option_string("plan").map(String::from);
 
         if reward_kind == REWARD_LICENSE {
+            if !may_issue(
+                ctx,
+                &self.service.config,
+                self.service.owner_id.as_deref(),
+                guild_id,
+            ) {
+                return ctx.reply_widget_hidden(ui::fail(
+                    "Not allowed",
+                    "Only the owner and the manager role can give away licence keys. Run the giveaway with an announcement reward instead.",
+                ));
+            }
             match &reward_plan {
                 Some(plan) if plan_exists(plan) => {}
                 _ => {
