@@ -5,11 +5,37 @@
       "staff_role_id": "1540325185465622641",
       "category_roles": {
         "feature": "1540325185465622641",
+        "faq": "1540325185465622641",
         "bug": "1543431877950439587",
-        "license": "1540325181996933191",
-        "faq": "1540325185465622641"
+        "license": "1540325181996933191"
       },
-      "ticket_counter": 4
+      "ticket_counter": 9,
+      "ticket_log_channel_id": "1540325345712930816",
+      "ticket_transcripts": true,
+      "ticket_dm_summary": true,
+      "member_role_id": "1540325199310749717",
+      "self_roles": {
+        "dev_logs": "1530946655136907415",
+        "updates": "1543593392922169434",
+        "badomen": "1543593640868192286",
+        "norvoro": "1543593808191688744",
+        "nouga": "1543593745956610168",
+        "restarts": "1543593525265047582"
+      },
+      "log_channels": {
+        "default": "1540325345712930816"
+      },
+      "rules": [],
+      "rules_channel_id": "1494028752680910868",
+      "rules_message_id": "1543633803703230507",
+      "rules_updated_at": 0,
+      "brand": {
+        "name": null,
+        "accent": null,
+        "logo_url": null,
+        "banner_url": null,
+        "footer": null
+      }
     }
   }
 }

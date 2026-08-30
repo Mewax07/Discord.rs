@@ -10,3 +10,4 @@ serde_json.workspace = true
 rustls.workspace = true
 webpki-roots.workspace = true
 getrandom.workspace = true
+flate2.workspace = true

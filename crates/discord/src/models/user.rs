@@ -13,6 +13,16 @@ pub struct User {
     pub bot: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Member {
+    #[serde(default)]
+    pub user: Option<User>,
+    #[serde(default)]
+    pub roles: Vec<String>,
+    #[serde(default)]
+    pub nick: Option<String>,
+}
+
 impl User {
     pub fn display_name(&self) -> &str {
         self.global_name.as_deref().unwrap_or(&self.username)

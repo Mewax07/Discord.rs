@@ -160,6 +160,64 @@ impl HttpClient {
             parse_json_body(&resp)
         }
     }
+
+    pub fn post_multipart(
+        &self,
+        path: &str,
+        token: &str,
+        payload_json: &str,
+        file_name: &str,
+        file_bytes: &[u8],
+    ) -> Result<Value> {
+        let boundary = "badomenboundary7d1f2a9c";
+        let mut body = Vec::with_capacity(file_bytes.len() + 512);
+
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(b"Content-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n");
+        body.extend_from_slice(payload_json.as_bytes());
+        body.extend_from_slice(b"\r\n");
+
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+                format!("Content-Disposition: form-data; name=\"files[0]\"; filename=\"{file_name}\"\r\nContent-Type: application/octet-stream\r\n\r\n").as_bytes(),
+            );
+        body.extend_from_slice(file_bytes);
+        body.extend_from_slice(b"\r\n");
+
+        body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+
+        let auth = format!("Authorization: Bot {token}");
+        let content_type = format!("Content-Type: multipart/form-data; boundary={boundary}");
+        let resp = self.request(
+            "POST",
+            path,
+            &[split_header(&auth), split_header(&content_type)],
+            Some(&body),
+        )?;
+        check_status(&resp)?;
+        if resp.body.is_empty() {
+            Ok(Value::Null)
+        } else {
+            parse_json_body(&resp)
+        }
+    }
+
+    pub fn patch_json<T: Serialize + ?Sized>(
+        &self,
+        path: &str,
+        token: &str,
+        body: &T,
+    ) -> Result<Value> {
+        let auth = format!("Authorization: Bot {token}");
+        let payload = serde_json::to_vec(body)?;
+        let resp = self.request("PATCH", path, &[split_header(&auth)], Some(&payload))?;
+        check_status(&resp)?;
+        if resp.body.is_empty() {
+            Ok(Value::Null)
+        } else {
+            parse_json_body(&resp)
+        }
+    }
 }
 
 fn route_template(path: &str) -> String {

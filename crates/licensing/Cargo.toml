@@ -1,12 +1,10 @@
-
 [package]
-name = "badomen_bot"
+name = "licensing"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
-discord = { path = "../discord" }
-licensing = { path = "../licensing" }
 serde.workspace = true
 serde_json.workspace = true
 getrandom.workspace = true
+ring.workspace = true

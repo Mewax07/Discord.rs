@@ -3,7 +3,7 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{ActionRow, Channel, CommandChoice, Role, User};
+use super::{ActionRow, Channel, CommandChoice, Message, MessagePayload, Role, User};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -107,11 +107,30 @@ pub struct Interaction {
     pub member: Option<InteractionMember>,
     #[serde(default)]
     pub user: Option<User>,
+    #[serde(default)]
+    pub message: Option<Message>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InteractionMember {
     pub user: User,
+    #[serde(default)]
+    pub roles: Vec<String>,
+    #[serde(default)]
+    pub nick: Option<String>,
+    #[serde(default)]
+    pub permissions: Option<String>,
+    #[serde(default)]
+    pub joined_at: Option<String>,
+}
+
+impl InteractionMember {
+    pub fn permission_bits(&self) -> u64 {
+        self.permissions
+            .as_deref()
+            .and_then(|p| p.parse::<u64>().ok())
+            .unwrap_or(0)
+    }
 }
 
 impl Interaction {
@@ -126,6 +145,8 @@ pub enum InteractionResponseType {
     Pong = 1,
     ChannelMessageWithSource = 4,
     DeferredChannelMessageWithSource = 5,
+    DeferredUpdateMessage = 6,
+    UpdateMessage = 7,
     ApplicationCommandAutocompleteResult = 8,
     Modal = 9,
 }
@@ -136,65 +157,46 @@ impl Serialize for InteractionResponseType {
     }
 }
 
-pub const EPHEMERAL: u32 = 1 << 6;
-
-#[derive(Debug, Serialize)]
-pub struct InteractionCallbackData {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub embeds: Vec<super::Embed>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub components: Vec<ActionRow>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub flags: Option<u32>,
-}
-
 #[derive(Serialize)]
 pub struct InteractionResponse {
     #[serde(rename = "type")]
     kind: InteractionResponseType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<InteractionCallbackData>,
+    data: Option<MessagePayload>,
 }
 
 impl InteractionResponse {
-    pub fn message(content: impl Into<String>) -> Self {
+    pub fn message(payload: MessagePayload) -> Self {
         Self {
             kind: InteractionResponseType::ChannelMessageWithSource,
-            data: Some(InteractionCallbackData {
-                content: Some(content.into()),
-                embeds: vec![],
-                components: vec![],
-                flags: None,
-            }),
+            data: Some(payload),
         }
     }
 
-    pub fn embed(embed: super::Embed) -> Self {
+    pub fn update(payload: MessagePayload) -> Self {
         Self {
-            kind: InteractionResponseType::ChannelMessageWithSource,
-            data: Some(InteractionCallbackData {
-                content: None,
-                embeds: vec![embed],
-                components: vec![],
-                flags: None,
-            }),
+            kind: InteractionResponseType::UpdateMessage,
+            data: Some(payload),
         }
     }
 
-    pub fn with_components(mut self, components: Vec<ActionRow>) -> Self {
-        if let Some(d) = &mut self.data {
-            d.components = components;
+    pub fn deferred(ephemeral: bool) -> Self {
+        let payload = if ephemeral {
+            MessagePayload::empty().ephemeral()
+        } else {
+            MessagePayload::empty()
+        };
+        Self {
+            kind: InteractionResponseType::DeferredChannelMessageWithSource,
+            data: Some(payload),
         }
-        self
     }
 
-    pub fn ephemeral(mut self) -> Self {
-        if let Some(d) = &mut self.data {
-            d.flags = Some(EPHEMERAL);
+    pub fn deferred_update() -> Self {
+        Self {
+            kind: InteractionResponseType::DeferredUpdateMessage,
+            data: None,
         }
-        self
     }
 }
 

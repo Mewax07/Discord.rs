@@ -49,6 +49,10 @@ pub struct CommandOption {
     pub options: Vec<CommandOption>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub channel_types: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_value: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_value: Option<i64>,
 }
 
 impl CommandOption {
@@ -66,6 +70,8 @@ impl CommandOption {
             autocomplete: false,
             options: Vec::new(),
             channel_types: Vec::new(),
+            min_value: None,
+            max_value: None,
         }
     }
 
@@ -99,6 +105,24 @@ impl CommandOption {
 
     pub fn subcommand(name: impl Into<String>, description: impl Into<String>) -> Self {
         Self::new(CommandOptionType::SubCommand, name, description)
+    }
+
+    pub fn group(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self::new(CommandOptionType::SubCommandGroup, name, description)
+    }
+
+    pub fn attachment(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self::new(CommandOptionType::Attachment, name, description)
+    }
+
+    pub fn min_value(mut self, value: i64) -> Self {
+        self.min_value = Some(value);
+        self
+    }
+
+    pub fn max_value(mut self, value: i64) -> Self {
+        self.max_value = Some(value);
+        self
     }
 
     pub fn required(mut self, required: bool) -> Self {
@@ -136,6 +160,10 @@ pub struct CommandDefinition {
     pub description: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<CommandOption>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_member_permissions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dm_permission: Option<bool>,
 }
 
 impl CommandDefinition {
@@ -144,11 +172,23 @@ impl CommandDefinition {
             name: name.into(),
             description: description.into(),
             options: Vec::new(),
+            default_member_permissions: None,
+            dm_permission: None,
         }
     }
 
     pub fn option(mut self, option: CommandOption) -> Self {
         self.options.push(option);
+        self
+    }
+
+    pub fn required_permissions(mut self, bits: u64) -> Self {
+        self.default_member_permissions = Some(bits.to_string());
+        self
+    }
+
+    pub fn guild_only(mut self) -> Self {
+        self.dm_permission = Some(false);
         self
     }
 }
