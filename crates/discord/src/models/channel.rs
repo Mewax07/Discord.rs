@@ -12,3 +12,9 @@ pub struct Channel {
     #[serde(default)]
     pub parent_id: Option<String>,
 }
+
+impl Channel {
+    pub fn mention(&self) -> String {
+        format!("<#{}>", self.id)
+    }
+}

@@ -9,3 +9,9 @@ pub struct Role {
     #[serde(default)]
     pub position: i32,
 }
+
+impl Role {
+    pub fn mention(&self) -> String {
+        format!("<@&{}>", self.id)
+    }
+}

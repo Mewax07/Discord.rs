@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use discord::{
     commands::CommandRegistry,
     events::{parse_dispatch, Event},
@@ -6,9 +8,12 @@ use discord::{
     shutdown::install_handler,
 };
 
-use crate::commands::{LookupCommand, PingCommand};
+use crate::{
+    commands::{ConfigCommand, TicketCommand, TicketCategoryHandler}, storage::ConfigStore,
+};
 
 mod commands;
+mod storage;
 
 pub fn main() {
     install_handler();
@@ -19,6 +24,7 @@ pub fn main() {
     let log_channel_id = std::env::var("LOGS_CHANNEL_ID").ok();
 
     let rest = RestClient::new(token.clone());
+    let config = Arc::new(ConfigStore::open("data/config.json"));
 
     let app = rest
         .get_application_info()
@@ -26,15 +32,20 @@ pub fn main() {
     println!("Application ID: {}", app.id);
 
     let registry = CommandRegistry::new()
-        .register(PingCommand)
-        .register(LookupCommand);
+        .register(ConfigCommand {
+            config: config.clone(),
+        })
+        .register(TicketCommand)
+        .register_component(TicketCategoryHandler {
+            config: config.clone(),
+        });
 
     registry
         .sync_with_discord(&rest, &app.id, &guild_id)
         .expect("Failed to sync commands with Discord");
     println!("Commands synced.");
 
-    let config = GatewayConfig::new(
+    let gw_config = GatewayConfig::new(
         token,
         intents::GUILDS | intents::GUILD_MESSAGES | intents::MESSAGE_CONTENT,
     )
@@ -44,7 +55,7 @@ pub fn main() {
         PresenceStatus::Dnd,
     );
 
-    let mut gateway = Gateway::new(config);
+    let mut gateway = Gateway::new(gw_config);
 
     gateway.run(
         |GatewayEvent::Dispatch { name, data }| match parse_dispatch(&name, data) {
@@ -57,7 +68,7 @@ pub fn main() {
     );
 
     if let Some(channel_id) = log_channel_id {
-        let _ = rest.send_message(&channel_id, Some("Bot shut down properly."), vec![]);
+        let _ = rest.send_message(&channel_id, Some("Bot shut down properly."), vec![], vec![]);
     }
     println!("Stop completed.");
 }

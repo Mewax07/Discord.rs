@@ -93,6 +93,10 @@ impl CommandOption {
         Self::new(CommandOptionType::Number, name, description)
     }
 
+    pub fn subcommand(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self::new(CommandOptionType::SubCommand, name, description)
+    }
+
     pub fn required(mut self, required: bool) -> Self {
         self.required = required;
         self
@@ -108,6 +112,11 @@ impl CommandOption {
 
     pub fn autocomplete(mut self, enabled: bool) -> Self {
         self.autocomplete = enabled;
+        self
+    }
+
+    pub fn option(mut self, opt: CommandOption) -> Self {
+        self.options.push(opt);
         self
     }
 }

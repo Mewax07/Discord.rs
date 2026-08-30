@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
-use crate::models::{command::CommandChoice, role::Role, Channel, User};
+use crate::models::{command::CommandChoice, role::Role, ActionRow, Channel, User};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -48,17 +48,22 @@ pub struct InteractionDataOption {
     pub value: Value,
     #[serde(default)]
     pub focused: bool,
+    #[serde(default)]
+    pub options: Vec<InteractionDataOption>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct InteractionData {
-    pub name: String,
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub options: Vec<InteractionDataOption>,
     #[serde(default)]
     pub custom_id: Option<String>,
     #[serde(default)]
     pub resolved: ResolvedData,
+    #[serde(default)]
+    pub values: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,12 +110,18 @@ impl Serialize for InteractionResponseType {
     }
 }
 
+pub const EPHEMERAL: u32 = 1 << 6;
+
 #[derive(Debug, Serialize)]
 pub struct InteractionCallbackData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub embeds: Vec<super::Embed>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub components: Vec<ActionRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -128,6 +139,8 @@ impl InteractionResponse {
             data: Some(InteractionCallbackData {
                 content: Some(content.into()),
                 embeds: vec![],
+                components: vec![],
+                flags: None,
             }),
         }
     }
@@ -138,8 +151,24 @@ impl InteractionResponse {
             data: Some(InteractionCallbackData {
                 content: None,
                 embeds: vec![embed],
+                components: vec![],
+                flags: None,
             }),
         }
+    }
+
+    pub fn with_components(mut self, components: Vec<ActionRow>) -> Self {
+        if let Some(d) = &mut self.data {
+            d.components = components;
+        }
+        self
+    }
+
+    pub fn ephemeral(mut self) -> Self {
+        if let Some(d) = &mut self.data {
+            d.flags = Some(EPHEMERAL);
+        }
+        self
     }
 }
 

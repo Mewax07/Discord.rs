@@ -2,9 +2,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    models::{ApplicationInfo, CommandDefinition, Embed, RegisteredCommand},
-    net::HttpClient,
-    Result,
+    Result, models::{
+        ActionRow, ApplicationInfo, Channel, CommandDefinition, Embed, PermissionOverwrite, RegisteredCommand,
+    }, net::HttpClient,
 };
 
 const API: &str = "/api/v10";
@@ -20,6 +20,19 @@ struct CreateMessage<'a> {
     content: Option<&'a str>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     embeds: Vec<Embed>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    components: Vec<ActionRow>,
+}
+
+#[derive(Serialize)]
+struct CreateChannelBody {
+    name: String,
+    #[serde(rename = "type")]
+    kind: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    permission_overwrites: Vec<PermissionOverwrite>,
 }
 
 impl RestClient {
@@ -35,9 +48,14 @@ impl RestClient {
         channel_id: &str,
         content: Option<&str>,
         embeds: Vec<Embed>,
+        components: Vec<ActionRow>,
     ) -> Result<Value> {
         let path = format!("{API}/channels/{channel_id}/messages");
-        let body = CreateMessage { content, embeds };
+        let body = CreateMessage {
+            content,
+            embeds,
+            components,
+        };
         self.http.post_json(&path, &self.token, &body)
     }
 
@@ -87,6 +105,30 @@ impl RestClient {
     ) -> Result<()> {
         let path = format!("{API}/interactions/{interaction_id}/{interaction_token}/callback");
         self.http.post_json(&path, &self.token, response)?;
+        Ok(())
+    }
+
+    pub fn create_channel(
+        &self,
+        guild_id: &str,
+        name: &str,
+        parent_id: Option<&str>,
+        overwrites: Vec<PermissionOverwrite>,
+    ) -> Result<Channel> {
+        let path = format!("{API}/guilds/{guild_id}/channels");
+        let body = CreateChannelBody {
+            name: name.to_string(),
+            kind: 0,
+            parent_id: parent_id.map(String::from),
+            permission_overwrites: overwrites,
+        };
+        let value = self.http.post_json(&path, &self.token, &body)?;
+        Ok(serde_json::from_value(value)?)
+    }
+
+    pub fn delete_channel(&self, channel_id: &str) -> Result<()> {
+        let path = format!("{API}/channels/{channel_id}");
+        self.http.delete(&path, &self.token)?;
         Ok(())
     }
 }

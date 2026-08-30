@@ -149,6 +149,17 @@ impl HttpClient {
             parse_json_body(&resp)
         }
     }
+
+    pub fn delete(&self, path: &str, token: &str) -> Result<Value> {
+        let auth = format!("Authorization: Bot {token}");
+        let resp = self.request("DELETE", path, &[split_header(&auth)], None)?;
+        check_status(&resp)?;
+        if resp.body.is_empty() {
+            Ok(Value::Null)
+        } else {
+            parse_json_body(&resp)
+        }
+    }
 }
 
 fn route_template(path: &str) -> String {

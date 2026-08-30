@@ -18,3 +18,9 @@ pub trait SlashCommand: Send + Sync {
         Vec::new()
     }
 }
+
+pub trait ComponentHandler: Send + Sync {
+    fn matches(&self, custom_id: &str) -> bool;
+
+    fn execute(&self, ctx: &CommandContext) -> Result<()>;
+}

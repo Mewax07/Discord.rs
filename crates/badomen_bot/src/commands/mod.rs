@@ -1,5 +1,5 @@
-mod lookup;
-mod ping;
+mod config;
+mod ticket;
 
-pub use lookup::LookupCommand;
-pub use ping::PingCommand;
+pub use config::ConfigCommand;
+pub use ticket::{TicketCommand, TicketCategoryHandler};

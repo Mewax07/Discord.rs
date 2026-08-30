@@ -7,6 +7,8 @@ name = "badomen_bot"
 version = "1.0.0"
 dependencies = [
  "discord",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
