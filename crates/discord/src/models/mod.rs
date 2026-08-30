@@ -8,7 +8,9 @@ mod permission;
 mod role;
 mod user;
 
-pub use channel::Channel;
+pub use channel::{
+    Channel, CHANNEL_TYPE_GUILD_CATEGORY, CHANNEL_TYPE_GUILD_TEXT, CHANNEL_TYPE_GUILD_VOICE,
+};
 pub use command::{
     ApplicationInfo, CommandChoice, CommandDefinition, CommandOption, CommandOptionType,
     RegisteredCommand,

@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize, Serializer};
+use serde::ser::Serializer;
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
@@ -46,6 +47,8 @@ pub struct CommandOption {
     pub autocomplete: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<CommandOption>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channel_types: Vec<u8>,
 }
 
 impl CommandOption {
@@ -62,6 +65,7 @@ impl CommandOption {
             choices: Vec::new(),
             autocomplete: false,
             options: Vec::new(),
+            channel_types: Vec::new(),
         }
     }
 
@@ -119,6 +123,11 @@ impl CommandOption {
         self.options.push(opt);
         self
     }
+
+    pub fn channel_types(mut self, types: Vec<u8>) -> Self {
+        self.channel_types = types;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -144,13 +153,13 @@ impl CommandDefinition {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct RegisteredCommand {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct ApplicationInfo {
     pub id: String,
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use discord::commands::{CommandContext, SlashCommand};
 use discord::error::Result;
-use discord::models::{CommandDefinition, CommandOption};
+use discord::models::{CommandDefinition, CommandOption, CHANNEL_TYPE_GUILD_CATEGORY};
 
 use crate::storage::ConfigStore;
 
@@ -14,8 +14,15 @@ impl SlashCommand for ConfigCommand {
     fn definition(&self) -> CommandDefinition {
         CommandDefinition::new("config", "Configure the bot for this server")
             .option(
-                CommandOption::subcommand("ticket-category", "Category in which to create tickets")
-                    .option(CommandOption::channel("category", "Lounge category").required(true)),
+                CommandOption::subcommand(
+                    "ticket-category",
+                    "Category where tickets will be created",
+                )
+                .option(
+                    CommandOption::channel("category", "Category channel")
+                        .required(true)
+                        .channel_types(vec![CHANNEL_TYPE_GUILD_CATEGORY]),
+                ),
             )
             .option(
                 CommandOption::subcommand("staff-role", "Role with access to tickets")
@@ -25,14 +32,17 @@ impl SlashCommand for ConfigCommand {
 
     fn execute(&self, ctx: &CommandContext) -> Result<()> {
         let Some(guild_id) = ctx.guild_id() else {
-            return ctx.reply("This command must be used on a server.");
+            return ctx.reply("This command must be used in a server.");
         };
 
         match ctx.subcommand() {
             Some("ticket-category") => {
                 let Some(channel) = ctx.option_channel("category") else {
-                    return ctx.reply("Lounge not found.");
+                    return ctx.reply("Channel not found.");
                 };
+                if !channel.is_category() {
+                    return ctx.reply("The selected channel must be a category.");
+                }
                 let (id, mention) = (channel.id.clone(), channel.mention());
                 self.config
                     .update(guild_id, |c| c.ticket_category_id = Some(id));
@@ -44,7 +54,7 @@ impl SlashCommand for ConfigCommand {
                 };
                 let (id, mention) = (role.id.clone(), role.mention());
                 self.config.update(guild_id, |c| c.staff_role_id = Some(id));
-                ctx.reply(format!("Staff role defined for {mention}."))
+                ctx.reply(format!("Staff role set to {mention}."))
             }
             _ => ctx.reply("Unknown subcommand."),
         }
