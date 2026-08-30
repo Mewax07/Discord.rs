@@ -40,7 +40,9 @@ impl CommandRegistry {
             InteractionType::ApplicationCommandAutocomplete => {
                 self.dispatch_autocomplete(rest, interaction)
             }
-            InteractionType::MessageComponent => self.dispatch_component(rest, interaction),
+            InteractionType::MessageComponent | InteractionType::ModalSubmit => {
+                self.dispatch_component(rest, interaction)
+            }
             _ => {}
         }
     }

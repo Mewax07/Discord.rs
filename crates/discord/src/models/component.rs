@@ -18,10 +18,23 @@ impl Serialize for ButtonStyle {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
+pub enum TextInputStyle {
+    Short = 1,
+    Paragraph = 2,
+}
+impl Serialize for TextInputStyle {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u8(*self as u8)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 enum ComponentKind {
     ActionRow = 1,
     Button = 2,
     StringSelect = 3,
+    TextInput = 4,
 }
 
 impl Serialize for ComponentKind {
@@ -121,10 +134,58 @@ impl SelectMenu {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct TextInput {
+    #[serde(rename = "type")]
+    kind: ComponentKind,
+    custom_id: String,
+    style: TextInputStyle,
+    label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    placeholder: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_length: Option<u32>,
+    required: bool,
+}
+
+impl TextInput {
+    pub fn new(
+        custom_id: impl Into<String>,
+        label: impl Into<String>,
+        style: TextInputStyle,
+    ) -> Self {
+        Self {
+            kind: ComponentKind::TextInput,
+            custom_id: custom_id.into(),
+            style,
+            label: label.into(),
+            placeholder: None,
+            max_length: None,
+            required: true,
+        }
+    }
+
+    pub fn required(mut self, required: bool) -> Self {
+        self.required = required;
+        self
+    }
+
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = Some(text.into());
+        self
+    }
+
+    pub fn max_length(mut self, len: u32) -> Self {
+        self.max_length = Some(len);
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 enum Component {
     Button(Button),
     SelectMenu(SelectMenu),
+    TextInput(TextInput),
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -146,6 +207,13 @@ impl ActionRow {
         Self {
             kind: ComponentKind::ActionRow,
             components: vec![Component::SelectMenu(menu)],
+        }
+    }
+
+    pub fn input(text_input: TextInput) -> Self {
+        Self {
+            kind: ComponentKind::ActionRow,
+            components: vec![Component::TextInput(text_input)],
         }
     }
 }

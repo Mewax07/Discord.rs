@@ -3,9 +3,11 @@ use serde_json::Value;
 use crate::error::Result;
 use crate::models::{
     Channel, Embed, Interaction, InteractionData, InteractionDataOption, InteractionResponse,
-    PermissionOverwrite, Role, User,
+    ModalResponse, PermissionOverwrite, Role, User,
 };
 use crate::rest::RestClient;
+
+const EMPTY_OPTIONS: &[InteractionDataOption] = &[];
 
 pub struct CommandContext<'a> {
     rest: &'a RestClient,
@@ -44,7 +46,7 @@ impl<'a> CommandContext<'a> {
 
     fn options_scope(&self) -> &'a [InteractionDataOption] {
         let Some(data) = self.data() else {
-            return &[] as &[InteractionDataOption];
+            return EMPTY_OPTIONS;
         };
         match data.options.first() {
             Some(first) if first.value.is_null() => &first.options,
@@ -102,6 +104,10 @@ impl<'a> CommandContext<'a> {
         self.selected_values().first().map(String::as_str)
     }
 
+    pub fn modal_value(&self, custom_id: &str) -> Option<&'a str> {
+        self.data()?.modal_value(custom_id)
+    }
+
     pub fn reply(&self, content: impl Into<String>) -> Result<()> {
         self.reply_response(InteractionResponse::message(content))
     }
@@ -111,6 +117,20 @@ impl<'a> CommandContext<'a> {
     }
 
     pub fn reply_response(&self, response: InteractionResponse) -> Result<()> {
+        self.rest.create_interaction_response(
+            &self.interaction.id,
+            &self.interaction.token,
+            &response,
+        )
+    }
+
+    pub fn show_modal(
+        &self,
+        custom_id: impl Into<String>,
+        title: impl Into<String>,
+        rows: Vec<crate::models::ActionRow>,
+    ) -> Result<()> {
+        let response = ModalResponse::new(custom_id, title, rows);
         self.rest.create_interaction_response(
             &self.interaction.id,
             &self.interaction.token,

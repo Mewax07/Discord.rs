@@ -15,12 +15,14 @@ pub use command::{
     ApplicationInfo, CommandChoice, CommandDefinition, CommandOption, CommandOptionType,
     RegisteredCommand,
 };
-pub use component::{ActionRow, Button, ButtonStyle, SelectMenu, SelectOption};
+pub use component::{
+    ActionRow, Button, ButtonStyle, SelectMenu, SelectOption, TextInput, TextInputStyle,
+};
 pub use embed::{Embed, EmbedAuthor, EmbedField, EmbedFooter, EmbedImage};
 pub use interaction::{
     AutocompleteResponse, Interaction, InteractionCallbackData, InteractionData,
     InteractionDataOption, InteractionResponse, InteractionResponseType, InteractionType,
-    ResolvedData, EPHEMERAL,
+    ModalResponse, ResolvedData, EPHEMERAL,
 };
 pub use message::Message;
 pub use permission::{PermissionOverwrite, PERM_SEND_MESSAGES, PERM_VIEW_CHANNEL};

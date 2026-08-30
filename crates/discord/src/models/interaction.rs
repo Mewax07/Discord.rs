@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
-use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::{self, Deserializer};
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::models::{command::CommandChoice, role::Role, ActionRow, Channel, User};
+use super::{ActionRow, Channel, CommandChoice, Role, User};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -25,7 +25,7 @@ impl<'de> Deserialize<'de> for InteractionType {
             4 => Ok(InteractionType::ApplicationCommandAutocomplete),
             5 => Ok(InteractionType::ModalSubmit),
             other => Err(de::Error::custom(format!(
-                "type d'interaction inconnu: {other}"
+                "unknown interaction type: {other}"
             ))),
         }
     }
@@ -34,11 +34,11 @@ impl<'de> Deserialize<'de> for InteractionType {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct ResolvedData {
     #[serde(default)]
-    pub users: HashMap<String, User>,
+    pub users: std::collections::HashMap<String, User>,
     #[serde(default)]
-    pub channels: HashMap<String, Channel>,
+    pub channels: std::collections::HashMap<String, Channel>,
     #[serde(default)]
-    pub roles: HashMap<String, Role>,
+    pub roles: std::collections::HashMap<String, Role>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,6 +53,19 @@ pub struct InteractionDataOption {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct ModalFieldValue {
+    pub custom_id: String,
+    #[serde(default)]
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ModalActionRowData {
+    #[serde(default)]
+    pub components: Vec<ModalFieldValue>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct InteractionData {
     #[serde(default)]
     pub name: Option<String>,
@@ -64,6 +77,18 @@ pub struct InteractionData {
     pub resolved: ResolvedData,
     #[serde(default)]
     pub values: Vec<String>,
+    #[serde(default)]
+    pub components: Vec<ModalActionRowData>,
+}
+
+impl InteractionData {
+    pub fn modal_value(&self, custom_id: &str) -> Option<&str> {
+        self.components
+            .iter()
+            .flat_map(|row| row.components.iter())
+            .find(|field| field.custom_id == custom_id)
+            .map(|field| field.value.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -102,6 +127,7 @@ pub enum InteractionResponseType {
     ChannelMessageWithSource = 4,
     DeferredChannelMessageWithSource = 5,
     ApplicationCommandAutocompleteResult = 8,
+    Modal = 9,
 }
 
 impl Serialize for InteractionResponseType {
@@ -127,9 +153,9 @@ pub struct InteractionCallbackData {
 #[derive(Serialize)]
 pub struct InteractionResponse {
     #[serde(rename = "type")]
-    pub kind: InteractionResponseType,
+    kind: InteractionResponseType,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<InteractionCallbackData>,
+    data: Option<InteractionCallbackData>,
 }
 
 impl InteractionResponse {
@@ -189,6 +215,37 @@ impl AutocompleteResponse {
         Self {
             kind: InteractionResponseType::ApplicationCommandAutocompleteResult,
             data: AutocompleteData { choices },
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct ModalResponse {
+    #[serde(rename = "type")]
+    kind: InteractionResponseType,
+    data: ModalCallbackData,
+}
+
+#[derive(Serialize)]
+struct ModalCallbackData {
+    custom_id: String,
+    title: String,
+    components: Vec<ActionRow>,
+}
+
+impl ModalResponse {
+    pub fn new(
+        custom_id: impl Into<String>,
+        title: impl Into<String>,
+        components: Vec<ActionRow>,
+    ) -> Self {
+        Self {
+            kind: InteractionResponseType::Modal,
+            data: ModalCallbackData {
+                custom_id: custom_id.into(),
+                title: title.into(),
+                components,
+            },
         }
     }
 }

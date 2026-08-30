@@ -28,6 +28,18 @@ impl SlashCommand for ConfigCommand {
                 CommandOption::subcommand("staff-role", "Role with access to tickets")
                     .option(CommandOption::role("role", "Staff role").required(true)),
             )
+            .option(
+                CommandOption::subcommand("category-role", "Role pinged for a ticket category")
+                    .option(
+                        CommandOption::string("category", "Ticket category")
+                            .required(true)
+                            .choice("Report a bug", "bug")
+                            .choice("License key", "license")
+                            .choice("Suggestion", "feature")
+                            .choice("General question", "faq"),
+                    )
+                    .option(CommandOption::role("role", "Role to ping").required(true)),
+            )
     }
 
     fn execute(&self, ctx: &CommandContext) -> Result<()> {
@@ -55,6 +67,20 @@ impl SlashCommand for ConfigCommand {
                 let (id, mention) = (role.id.clone(), role.mention());
                 self.config.update(guild_id, |c| c.staff_role_id = Some(id));
                 ctx.reply(format!("Staff role set to {mention}."))
+            }
+            Some("category-role") => {
+                let Some(category) = ctx.option_string("category") else {
+                    return ctx.reply("Missing category.");
+                };
+                let Some(role) = ctx.option_role("role") else {
+                    return ctx.reply("Role not found.");
+                };
+                let (category, id, mention) =
+                    (category.to_string(), role.id.clone(), role.mention());
+                self.config.update(guild_id, |c| {
+                    c.category_roles.insert(category, id);
+                });
+                ctx.reply(format!("Tickets in this category will now ping {mention}."))
             }
             _ => ctx.reply("Unknown subcommand."),
         }

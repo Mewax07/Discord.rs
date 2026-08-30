@@ -9,7 +9,7 @@ use discord::{
 };
 
 use crate::{
-    commands::{ConfigCommand, TicketCommand, TicketCategoryHandler}, storage::ConfigStore,
+    commands::{ConfigCommand, TicketCategoryHandler, TicketCommand, TicketModalHandler}, storage::ConfigStore,
 };
 
 mod commands;
@@ -36,7 +36,8 @@ pub fn main() {
             config: config.clone(),
         })
         .register(TicketCommand)
-        .register_component(TicketCategoryHandler {
+        .register_component(TicketCategoryHandler)
+        .register_component(TicketModalHandler {
             config: config.clone(),
         });
 

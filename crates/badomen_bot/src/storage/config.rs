@@ -10,6 +10,8 @@ pub struct GuildConfig {
     pub ticket_category_id: Option<String>,
     pub staff_role_id: Option<String>,
     #[serde(default)]
+    pub category_roles: HashMap<String, String>,
+    #[serde(default)]
     pub ticket_counter: u64,
 }
 
