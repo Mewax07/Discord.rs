@@ -1,344 +1,456 @@
 <!doctype html>
 <html lang="fr">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 
-        <title>BadOmen — Téléchargements officiels du client et du launcher</title>
-        <meta
-            name="description"
-            content="Téléchargez les versions officielles BadOmen : Nouga Launcher, BadOmen Visuals pour Minecraft et Norvoro Server. Builds servis à la source, empreintes SHA-256 vérifiables."
-        />
-        <meta name="author" content="BadOmen" />
-        <meta name="robots" content="index, follow, max-image-preview:large" />
-        <meta name="theme-color" content="#090909" />
-        <meta name="color-scheme" content="dark" />
-        <link rel="canonical" href="https://badomen.org/" />
+		<title>
+			BadOmen — Téléchargements officiels du client et du launcher
+		</title>
+		<meta
+			name="description"
+			content="Téléchargez les versions officielles BadOmen : Nouga Launcher, BadOmen Visuals pour Minecraft et Norvoro Server."
+		/>
+		<meta name="author" content="BadOmen" />
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<meta name="theme-color" content="#090909" />
+		<meta name="color-scheme" content="dark" />
+		<link rel="canonical" href="https://badomen.org/" />
 
-        <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="BadOmen" />
-        <meta property="og:locale" content="fr_FR" />
-        <meta property="og:url" content="https://badomen.org/" />
-        <meta
-            property="og:title"
-            content="BadOmen — Téléchargements officiels du client et du launcher"
-        />
-        <meta
-            property="og:description"
-            content="Nouga Launcher, BadOmen Visuals et Norvoro Server. Builds officiels, empreintes SHA-256 vérifiables, servis à la source."
-        />
-        <meta property="og:image" content="https://badomen.org/assets/Logo.png" />
-        <meta property="og:image:alt" content="Logo BadOmen" />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="BadOmen" />
+		<meta property="og:locale" content="fr_FR" />
+		<meta property="og:url" content="https://badomen.org/" />
+		<meta
+			property="og:title"
+			content="BadOmen — Téléchargements officiels du client et de son launcher"
+		/>
+		<meta
+			property="og:description"
+			content="Nouga Launcher, BadOmen Visuals et Norvoro Server. Builds officiels."
+		/>
+		<meta
+			property="og:image"
+			content="https://badomen.org/assets/Logo.png"
+		/>
+		<meta property="og:image:alt" content="Logo BadOmen" />
 
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta
-            name="twitter:title"
-            content="BadOmen — Téléchargements officiels du client et du launcher"
-        />
-        <meta
-            name="twitter:description"
-            content="Nouga Launcher, BadOmen Visuals et Norvoro Server. Builds officiels, empreintes SHA-256 vérifiables."
-        />
-        <meta name="twitter:image" content="https://badomen.org/assets/Logo.png" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta
+			name="twitter:title"
+			content="BadOmen — Téléchargements officiels du client et du launcher"
+		/>
+		<meta
+			name="twitter:description"
+			content="Nouga Launcher, BadOmen Visuals et Norvoro Server. Builds officiels, empreintes SHA-256 vérifiables."
+		/>
+		<meta
+			name="twitter:image"
+			content="https://badomen.org/assets/Logo.png"
+		/>
 
-        <link rel="icon" href="/assets/Logo.png" />
-        <link rel="apple-touch-icon" href="/assets/Logo.png" />
+		<link rel="icon" href="/assets/Logo.png" />
+		<link rel="apple-touch-icon" href="/assets/Logo.png" />
 
-        <link
-            rel="preload"
-            href="/webfonts/fa-solid-900.woff2"
-            as="font"
-            type="font/woff2"
-            crossorigin
-        />
-        <link rel="stylesheet" href="/css/fontawesome.css" />
-        <link rel="stylesheet" href="/css/solid.css" />
-        <link rel="stylesheet" href="/css/brands.css" />
-        <link rel="stylesheet" href="/style.css" />
+		<link
+			rel="preload"
+			href="/webfonts/fa-solid-900.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
+		<link rel="stylesheet" href="/css/fontawesome.css" />
+		<link rel="stylesheet" href="/css/solid.css" />
+		<link rel="stylesheet" href="/css/brands.css" />
+		<link rel="stylesheet" href="/style.css" />
 
-        <script type="application/ld+json">
-            {
-                "@context": "https://schema.org",
-                "@graph": [
-                    {
-                        "@type": "Organization",
-                        "@id": "https://badomen.org/#organization",
-                        "name": "BadOmen",
-                        "url": "https://badomen.org/",
-                        "logo": "https://badomen.org/assets/Logo.png",
-                        "sameAs": ["https://discord.gg/tNuuHhEd8T"]
-                    },
-                    {
-                        "@type": "WebSite",
-                        "@id": "https://badomen.org/#website",
-                        "url": "https://badomen.org/",
-                        "name": "BadOmen",
-                        "inLanguage": "fr-FR",
-                        "publisher": { "@id": "https://badomen.org/#organization" }
-                    },
-                    {
-                        "@type": "SoftwareApplication",
-                        "name": "Nouga Launcher",
-                        "applicationCategory": "GameApplication",
-                        "operatingSystem": "Windows",
-                        "url": "https://badomen.org/#downloads",
-                        "publisher": { "@id": "https://badomen.org/#organization" }
-                    }
-                ]
-            }
-        </script>
-    </head>
-    <body>
-        <div class="site-shell">
-            <header>
-                <div class="header-inner">
-                    <a class="brand" href="/" aria-label="BadOmen, accueil">
-                        <span class="brand-mark"><img src="/assets/Logo.png" alt="" /></span>
-                        <span>BadOmen</span>
-                    </a>
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@graph": [
+					{
+						"@type": "Organization",
+						"@id": "https://badomen.org/#organization",
+						"name": "BadOmen",
+						"url": "https://badomen.org/",
+						"logo": "https://badomen.org/assets/Logo.png",
+						"sameAs": ["https://discord.gg/tNuuHhEd8T"]
+					},
+					{
+						"@type": "WebSite",
+						"@id": "https://badomen.org/#website",
+						"url": "https://badomen.org/",
+						"name": "BadOmen",
+						"inLanguage": "fr-FR",
+						"publisher": {
+							"@id": "https://badomen.org/#organization"
+						}
+					},
+					{
+						"@type": "SoftwareApplication",
+						"name": "Nouga Launcher",
+						"applicationCategory": "GameApplication",
+						"operatingSystem": "Windows",
+						"url": "https://badomen.org/#downloads",
+						"publisher": {
+							"@id": "https://badomen.org/#organization"
+						}
+					}
+				]
+			}
+		</script>
+	</head>
+	<body>
+		<div class="site-shell">
+			<header>
+				<div class="header-inner">
+					<a class="brand" href="/" aria-label="BadOmen, accueil">
+						<span class="brand-mark"
+							><img src="/assets/Logo.png" alt=""
+						/></span>
+						<span>BadOmen</span>
+					</a>
 
-                    <nav id="nav" aria-label="Navigation principale">
-                        <a href="#features">
-                            <i class="fa-solid fa-sparkles" aria-hidden="true"></i>
-                            <span>Pourquoi BadOmen</span>
-                        </a>
-                        <a class="active" href="#downloads">
-                            <i class="fa-solid fa-download" aria-hidden="true"></i>
-                            <span>Téléchargements</span>
-                        </a>
-                        <a href="https://discord.gg/tNuuHhEd8T" target="_blank" rel="noreferrer">
-                            <i class="fa-brands fa-discord" aria-hidden="true"></i>
-                            <span>Support</span>
-                            <i
-                                class="fa-solid fa-up-right-from-square external-arrow"
-                                aria-hidden="true"
-                            ></i>
-                        </a>
-                    </nav>
+					<nav id="nav" aria-label="Navigation principale">
+						<a href="#features">
+							<i
+								class="fa-solid fa-sparkles"
+								aria-hidden="true"
+							></i>
+							<span>Pourquoi BadOmen</span>
+						</a>
+						<a class="active" href="#downloads">
+							<i
+								class="fa-solid fa-download"
+								aria-hidden="true"
+							></i>
+							<span>Téléchargements</span>
+						</a>
+						<a
+							href="https://discord.gg/tNuuHhEd8T"
+							target="_blank"
+							rel="noreferrer"
+						>
+							<i
+								class="fa-brands fa-discord"
+								aria-hidden="true"
+							></i>
+							<span>Support</span>
+							<i
+								class="fa-solid fa-up-right-from-square external-arrow"
+								aria-hidden="true"
+							></i>
+						</a>
+					</nav>
 
-                    <div class="header-actions">
-                        <a
-                            class="primary small"
-                            href="https://discord.gg/tNuuHhEd8T"
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            <i class="fa-brands fa-discord" aria-hidden="true"></i>
-                            Rejoindre
-                        </a>
-                    </div>
+					<div class="header-actions">
+						<a
+							class="primary small"
+							href="https://discord.gg/tNuuHhEd8T"
+							target="_blank"
+							rel="noreferrer"
+						>
+							<i
+								class="fa-brands fa-discord"
+								aria-hidden="true"
+							></i>
+							Rejoindre
+						</a>
+					</div>
 
-                    <button
-                        class="menu-button"
-                        id="menu"
-                        aria-label="Ouvrir le menu"
-                        aria-expanded="false"
-                        aria-controls="nav"
-                    >
-                        <i class="fa-solid fa-align-justify" aria-hidden="true"></i>
-                    </button>
-                </div>
-            </header>
+					<button
+						class="menu-button"
+						id="menu"
+						aria-label="Ouvrir le menu"
+						aria-expanded="false"
+						aria-controls="nav"
+					>
+						<i
+							class="fa-solid fa-align-justify"
+							aria-hidden="true"
+						></i>
+					</button>
+				</div>
+			</header>
 
-            <main>
-                <section
-                    class="hero section-pad reveal is-visible"
-                    id="home"
-                    aria-label="Téléchargements BadOmen"
-                >
-                    <div class="hero-shader" id="shader" aria-hidden="true"></div>
-                    <div class="hero-grid grid-lines" aria-hidden="true"></div>
-                    <div class="hero-inner page-width">
-                        <div class="hero-copy">
-                            <div class="eyebrow">Builds officiels, servis à la source</div>
-                            <h1>
-                                <span class="solid">BADOMEN</span>
-                                <span class="outline">VISUALS</span>
-                            </h1>
-                            <p>
-                                Le launcher, le client et les outils. Toujours la dernière version,
-                                jamais un miroir.
-                            </p>
-                        </div>
-                    </div>
-                    <a class="section-scroll" href="#features" aria-label="Section suivante">
-                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
-                    </a>
-                </section>
+			<main>
+				<section
+					class="hero section-pad reveal is-visible"
+					id="home"
+					aria-label="Téléchargements BadOmen"
+				>
+					<div
+						class="hero-shader"
+						id="shader"
+						aria-hidden="true"
+					></div>
+					<div class="hero-grid grid-lines" aria-hidden="true"></div>
+					<div class="hero-inner page-width">
+						<div class="hero-copy">
+							<div class="eyebrow">
+								Builds officiels, dernière version
+							</div>
+							<h1>
+								<span class="solid">BADOMEN</span>
+								<span class="outline">VISUALS</span>
+							</h1>
+							<p>
+								Le launcher, le client et les add-ons. Toujours
+								la dernière version, jamais un miroir.
+							</p>
+						</div>
+					</div>
+					<a
+						class="section-scroll"
+						href="#features"
+						aria-label="Section suivante"
+					>
+						<i
+							class="fa-solid fa-arrow-down"
+							aria-hidden="true"
+						></i>
+					</a>
+				</section>
 
-                <section class="trust section-pad reveal" id="features">
-                    <div class="page-width">
-                        <div class="section-heading center">
-                            <span class="section-number">01 / Pourquoi BadOmen</span>
-                            <h2>
-                                Conçu pour <em>l'expérience</em>,<br />pas pour la capture d'écran.
-                            </h2>
-                            <p>
-                                Tout ce dont vous avez besoin pour une expérience visuelle fluide,
-                                sans interface encombrée.
-                            </p>
-                        </div>
+				<section class="trust section-pad reveal" id="features">
+					<div class="page-width">
+						<div class="section-heading center">
+							<span class="section-number"
+								>01 / Pourquoi BadOmen</span
+							>
+							<h2>
+								Conçu pour <em>l'expérience</em>,<br />pas pour
+								la capture d'écran.
+							</h2>
+							<p>
+								Tout ce dont vous avez besoin pour une
+								expérience visuelle fluide, sans interface
+								encombrée.
+							</p>
+						</div>
 
-                        <div class="trust-grid">
-                            <article class="trust-card">
-                                <div class="shader-preview" data-preview="community">
-                                    <i class="fa-solid fa-users" aria-hidden="true"></i>
-                                    <span>6&nbsp;176+</span>
-                                </div>
-                                <div class="trust-copy">
-                                    <span>01 / Communauté</span>
-                                    <h3>Communauté</h3>
-                                    <p>
-                                        Configurations prêtes à l'emploi, guides et retours
-                                        d'expérience en direct des joueurs.
-                                    </p>
-                                </div>
-                            </article>
+						<div class="trust-grid">
+							<article class="trust-card">
+								<div
+									class="shader-preview"
+									data-preview="community"
+								>
+									<i
+										class="fa-solid fa-users"
+										aria-hidden="true"
+									></i>
+									<span>20+</span>
+								</div>
+								<div class="trust-copy">
+									<span>01 / Communauté</span>
+									<h3>Communauté</h3>
+									<p>
+										Configurations prêtes à l'emploi, guides
+										et retours d'expérience en direct des
+										joueurs.
+									</p>
+								</div>
+							</article>
 
-                            <article class="trust-card featured">
-                                <div class="shader-preview" data-preview="updates">
-                                    <i
-                                        class="fa-solid fa-wand-magic-sparkles"
-                                        aria-hidden="true"
-                                    ></i>
-                                    <span>Nouveau / 2.0</span>
-                                </div>
-                                <div class="trust-copy">
-                                    <span>02 / Mises à jour</span>
-                                    <h3>Mises à jour</h3>
-                                    <p>
-                                        Nouveaux effets, correctifs rapides et versions stables,
-                                        publiés ici en premier.
-                                    </p>
-                                </div>
-                            </article>
+							<article class="trust-card featured">
+								<div
+									class="shader-preview"
+									data-preview="updates"
+								>
+									<i
+										class="fa-solid fa-wand-magic-sparkles"
+										aria-hidden="true"
+									></i>
+									<span>Nouveau / 2.0.0</span>
+								</div>
+								<div class="trust-copy">
+									<span>02 / Mises à jour</span>
+									<h3>Mises à jour</h3>
+									<p>
+										Nouveaux effets, correctifs rapides et
+										versions stables, publiés ici en
+										premier. (Sortie prévu pour Noël 2026)
+									</p>
+								</div>
+							</article>
 
-                            <article class="trust-card">
-                                <div class="shader-preview" data-preview="support">
-                                    <i class="fa-solid fa-headset" aria-hidden="true"></i>
-                                    <span>24h/24 et 7j/7</span>
-                                </div>
-                                <div class="trust-copy">
-                                    <span>03 / Support</span>
-                                    <h3>Soutien</h3>
-                                    <p>
-                                        Aide au lancement, à la configuration et à l'accès, sans
-                                        réponses toutes faites.
-                                    </p>
-                                </div>
-                            </article>
-                        </div>
-                    </div>
-                    <a class="section-scroll" href="#downloads" aria-label="Section suivante">
-                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
-                    </a>
-                </section>
+							<article class="trust-card">
+								<div
+									class="shader-preview"
+									data-preview="support"
+								>
+									<i
+										class="fa-solid fa-headset"
+										aria-hidden="true"
+									></i>
+									<span>24h/24 et 7j/7</span>
+								</div>
+								<div class="trust-copy">
+									<span>03 / Support</span>
+									<h3>Soutien</h3>
+									<p>
+										Aide au lancement, à la configuration et
+										à l'accès, sans réponses toutes faites.
+									</p>
+								</div>
+							</article>
+						</div>
+					</div>
+					<a
+						class="section-scroll"
+						href="#downloads"
+						aria-label="Section suivante"
+					>
+						<i
+							class="fa-solid fa-arrow-down"
+							aria-hidden="true"
+						></i>
+					</a>
+				</section>
 
-                <section class="section-pad reveal" id="downloads">
-                    <div class="page-width">
-                        <div class="section-heading center">
-                            <span class="section-number">02 / Téléchargements</span>
-                            <h2>Prenez ce dont <em>vous avez besoin</em></h2>
-                            <p id="count" class="muted"></p>
-                        </div>
-                        <div class="download-grid" id="list">
-                            <p class="muted" id="loading">Chargement de la liste des versions…</p>
-                        </div>
-                    </div>
-                    <a class="section-scroll" href="#access" aria-label="Section suivante">
-                        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
-                    </a>
-                </section>
+				<section class="section-pad reveal" id="downloads">
+					<div class="page-width">
+						<div class="section-heading center">
+							<span class="section-number"
+								>02 / Téléchargements</span
+							>
+							<h2>Prenez ce dont <em>vous avez besoin</em></h2>
+							<p id="count" class="muted"></p>
+						</div>
+						<div class="download-grid" id="list">
+							<p class="muted" id="loading">
+								Chargement de la liste des versions…
+							</p>
+						</div>
+					</div>
+					<a
+						class="section-scroll"
+						href="#access"
+						aria-label="Section suivante"
+					>
+						<i
+							class="fa-solid fa-arrow-down"
+							aria-hidden="true"
+						></i>
+					</a>
+				</section>
 
-                <section class="home-cta section-pad reveal" id="access">
-                    <div class="page-width cta-panel">
-                        <span class="section-number">03 / Support</span>
-                        <h2>Un souci avec une <em>installation</em> ?</h2>
-                        <p class="muted">
-                            Ouvrez un ticket sur le Discord, l'équipe reprend la main dessus.
-                        </p>
-                        <div class="cta-actions">
-                            <a
-                                class="primary"
-                                href="https://discord.gg/tNuuHhEd8T"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                <i class="fa-brands fa-discord" aria-hidden="true"></i>
-                                Rejoindre le Discord
-                            </a>
-                            <a class="secondary" href="mailto:support@badomen.org">
-                                <i class="fa-solid fa-envelope" aria-hidden="true"></i>
-                                support@badomen.org
-                            </a>
-                        </div>
-                    </div>
-                    <a class="section-scroll up" href="#home" aria-label="Revenir en haut">
-                        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
-                    </a>
-                </section>
-            </main>
+				<section class="home-cta section-pad reveal" id="access">
+					<div class="page-width cta-panel">
+						<span class="section-number">03 / Support</span>
+						<h2>Un souci avec une <em>installation</em> ?</h2>
+						<p class="muted">
+							Ouvrez un ticket sur le Discord, l'équipe reprend la
+							main dessus.
+						</p>
+						<div class="cta-actions">
+							<a
+								class="primary"
+								href="https://discord.gg/tNuuHhEd8T"
+								target="_blank"
+								rel="noreferrer"
+							>
+								<i
+									class="fa-brands fa-discord"
+									aria-hidden="true"
+								></i>
+								Rejoindre le Discord
+							</a>
+							<a
+								class="secondary"
+								href="mailto:support@badomen.org"
+							>
+								<i
+									class="fa-solid fa-envelope"
+									aria-hidden="true"
+								></i>
+								mail non disponible
+							</a>
+						</div>
+					</div>
+					<a
+						class="section-scroll up"
+						href="#home"
+						aria-label="Revenir en haut"
+					>
+						<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+					</a>
+				</section>
+			</main>
 
-            <footer id="site-footer" class="reveal">
-                <div class="page-width footer-top">
-                    <div class="footer-brand">
-                        <a class="brand" href="/">
-                            <span class="brand-mark"><img src="/assets/Logo.png" alt="" /></span>
-                            <span>BadOmen</span>
-                        </a>
-                        <p>Un mod visuel qui <br />devient vôtre.</p>
-                        <div>
-                            <a
-                                href="https://discord.gg/tNuuHhEd8T"
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label="Discord"
-                            >
-                                <i class="fa-brands fa-discord" aria-hidden="true"></i>
-                            </a>
-                            <a
-                                href="https://t.me/badomen"
-                                target="_blank"
-                                rel="noreferrer"
-                                aria-label="Telegram"
-                            >
-                                <i class="fa-brands fa-telegram-plane" aria-hidden="true"></i>
-                            </a>
-                        </div>
-                    </div>
+			<footer id="site-footer" class="reveal">
+				<div class="page-width footer-top">
+					<div class="footer-brand">
+						<a class="brand" href="/">
+							<span class="brand-mark"
+								><img src="/assets/Logo.png" alt=""
+							/></span>
+							<span>BadOmen</span>
+						</a>
+						<p>Un mod visuel qui <br />devient vôtre.</p>
+						<div>
+							<a
+								href="https://discord.gg/tNuuHhEd8T"
+								target="_blank"
+								rel="noreferrer"
+								aria-label="Discord"
+							>
+								<i
+									class="fa-brands fa-discord"
+									aria-hidden="true"
+								></i>
+							</a>
+							<a
+								href="https://t.me/badomen"
+								target="_blank"
+								rel="noreferrer"
+								aria-label="Telegram"
+							>
+								<i
+									class="fa-brands fa-telegram-plane"
+									aria-hidden="true"
+								></i>
+							</a>
+						</div>
+					</div>
 
-                    <div class="footer-links">
-                        <div>
-                            <span>Pages</span>
-                            <a href="#features">Pourquoi BadOmen</a>
-                            <a href="#downloads">Téléchargements</a>
-                        </div>
-                        <div>
-                            <span>Ressources</span>
-                            <a href="/downloads.json">Manifeste JSON</a>
-                            <a href="/v1/public-key">Clé publique</a>
-                        </div>
-                        <div>
-                            <span>Contact</span>
-                            <a href="mailto:support@badomen.org">support@badomen.org</a>
-                            <a href="https://discord.gg/tNuuHhEd8T" target="_blank" rel="noreferrer"
-                                >Discord</a
-                            >
-                        </div>
-                    </div>
-                </div>
+					<div class="footer-links">
+						<div>
+							<span>Pages</span>
+							<a href="#features">Pourquoi BadOmen</a>
+							<a href="#downloads">Téléchargements</a>
+						</div>
+						<div>
+							<span>Ressources</span>
+							<a href="/downloads.json">Manifeste JSON</a>
+							<a href="/v1/public-key">Clé publique</a>
+						</div>
+						<div>
+							<span>Contact</span>
+							<a href="mailto:support@badomen.org"
+								>support@badomen.org</a
+							>
+							<a
+								href="https://discord.gg/tNuuHhEd8T"
+								target="_blank"
+								rel="noreferrer"
+								>Discord</a
+							>
+						</div>
+					</div>
+				</div>
 
-                <div class="page-width footer-bottom">
-                    <span>© 2026 BadOmen. Tous droits réservés.</span>
-                    <button id="top">
-                        En haut
-                        <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
-                    </button>
-                </div>
-            </footer>
-        </div>
+				<div class="page-width footer-bottom">
+					<span>© 2026 BadOmen. Tous droits réservés.</span>
+					<button id="top">
+						En haut
+						<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+					</button>
+				</div>
+			</footer>
+		</div>
 
-        <script src="/ghost-fibers.js"></script>
-        <script src="/app.js"></script>
-    </body>
+		<script src="/ghost-fibers.js"></script>
+		<script src="/app.js"></script>
+	</body>
 </html>

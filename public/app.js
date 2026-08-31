@@ -7,8 +7,8 @@ const toTop = document.getElementById("top");
 const shader = document.getElementById("shader");
 
 const HERO_SHADER = {
-    lineColor: "#F06FFE",
-    glowColor: "#C83DDC",
+    lineColor: "#9F119B",
+    glowColor: "#6A0758",
     speed: 0.2,
     scale: 2,
     rotation: -62,
@@ -25,8 +25,8 @@ const HERO_SHADER = {
     lineSpacing: 0,
     lineSharpness: 16,
     glowFalloff: 10,
-    glowIntensity: 2.9,
-    brightness: 2,
+    glowIntensity: 1.8,
+    brightness: 1.5,
     blueBoost: 1.25,
     vignette: 0.68,
     grain: 0.05,
