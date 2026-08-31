@@ -28,6 +28,7 @@ pub struct Brand {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(default)]
+    #[serde(deserialize_with = "accent_from_json")]
     pub accent: Option<u32>,
     #[serde(default)]
     pub logo_url: Option<String>,
@@ -172,4 +173,32 @@ impl ConfigStore {
             cfg.ticket_counter
         })
     }
+}
+
+fn accent_from_json<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Accent {
+        Value(u32),
+        Text(String),
+    }
+
+    Ok(match Option::<Accent>::deserialize(deserializer)? {
+        None => None,
+        Some(Accent::Value(value)) => Some(value),
+        Some(Accent::Text(text)) => parse_accent(&text),
+    })
+}
+
+fn parse_accent(value: &str) -> Option<u32> {
+    let cleaned = value
+        .trim()
+        .trim_start_matches('#')
+        .trim_start_matches("0x");
+    (cleaned.len() == 6)
+        .then(|| u32::from_str_radix(cleaned, 16).ok())
+        .flatten()
 }

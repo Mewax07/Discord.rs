@@ -1,8 +1,11 @@
 use std::fs;
-use std::path::PathBuf;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{de::DeserializeOwned, Serialize};
+
+use crate::logs;
 
 pub struct JsonStore<T> {
     path: PathBuf,
@@ -19,14 +22,47 @@ impl<T: Serialize + DeserializeOwned + Default> JsonStore<T> {
             }
         }
 
-        let data = fs::read_to_string(&path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
+        let data = Self::load(&path);
 
         Self {
             path,
             data: Mutex::new(data),
+        }
+    }
+
+    fn load(path: &Path) -> T {
+        let raw = match fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(e) => {
+                if e.kind() != ErrorKind::NotFound {
+                    logs::error(
+                        "storage",
+                        format!("unable to read {} ({e}), starting empty", path.display()),
+                    );
+                }
+                return T::default();
+            }
+        };
+
+        match serde_json::from_str(&raw) {
+            Ok(data) => data,
+            Err(e) => {
+                let backup = path.with_extension("invalid");
+                let kept = fs::write(&backup, &raw).is_ok();
+                logs::error(
+                    "storage",
+                    format!(
+                        "{} could not be parsed ({e}), starting empty{}",
+                        path.display(),
+                        if kept {
+                            format!(", the original was copied to {}", backup.display())
+                        } else {
+                            String::new()
+                        }
+                    ),
+                );
+                T::default()
+            }
         }
     }
 
@@ -38,7 +74,10 @@ impl<T: Serialize + DeserializeOwned + Default> JsonStore<T> {
         let mut guard = self.data.lock().unwrap_or_else(|e| e.into_inner());
         let result = f(&mut guard);
         if let Err(e) = self.persist(&guard) {
-            eprintln!("failed to write JSON store ({}): {e}", self.path.display());
+            logs::error(
+                "storage",
+                format!("unable to save {} ({e})", self.path.display()),
+            );
         }
         result
     }
