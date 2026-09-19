@@ -193,6 +193,14 @@ impl LicenseService {
         }
     }
 
+    pub fn all(&self) -> Vec<License> {
+        self.store.read(|data| {
+            let mut found: Vec<License> = data.licenses.values().cloned().collect();
+            found.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            found
+        })
+    }
+
     pub fn for_owner(&self, owner_id: &str) -> Vec<License> {
         self.store.read(|data| {
             let mut found: Vec<License> = data

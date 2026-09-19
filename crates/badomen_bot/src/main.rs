@@ -9,7 +9,7 @@ use discord::{
 };
 use httpd::serve;
 use licensing::{ApiConfig, LicenseService, DEFAULT_OFFLINE_GRACE};
-use web::SiteConfig;
+use web::{AdminConfig, OAuthConfig, SiteConfig};
 
 use crate::{
     commands::{
@@ -327,7 +327,7 @@ fn start_http(licenses: Arc<LicenseService>, product: &str) {
         return;
     }
 
-    let site = Arc::new(site_config(&web_addr, product));
+    let site = Arc::new(site_config(&web_addr, product, licenses.clone()));
     if let Err(e) = web::prepare(&site) {
         logs::error("website", format!("cannot prepare the files folder: {e}"));
     }
@@ -370,8 +370,8 @@ fn start_http(licenses: Arc<LicenseService>, product: &str) {
     }
 }
 
-fn site_config(addr: &str, product: &str) -> SiteConfig {
-    SiteConfig::new(
+fn site_config(addr: &str, product: &str, licenses: Arc<LicenseService>) -> SiteConfig {
+    let mut config = SiteConfig::new(
         addr,
         std::env::var("SITE_NAME").unwrap_or_else(|_| product.to_string()),
     )
@@ -379,6 +379,102 @@ fn site_config(addr: &str, product: &str) -> SiteConfig {
     .files(std::env::var("WEB_FILES_DIR").unwrap_or_else(|_| "files".to_string()))
     .manifest("data/downloads.json")
     .discord(std::env::var("DISCORD_INVITE_URL").ok())
+    .licenses(Some(licenses))
+    .track_visits("data/visits.json")
+    .admin(admin_config())
+    .oauth(oauth_config());
+
+    if let Some(secret) = session_secret() {
+        config = config.session_secret(secret);
+    }
+
+    config
+}
+
+fn admin_config() -> Option<AdminConfig> {
+    let enabled = !std::env::var("ADMIN_PANEL_ENABLED").is_ok_and(|value| value == "false");
+    if !enabled {
+        logs::info("admin", "panel disabled by ADMIN_PANEL_ENABLED");
+        return None;
+    }
+
+    let password = std::env::var("ADMIN_PASSWORD").unwrap_or_default();
+    if password.len() < 8 {
+        logs::warn(
+            "admin",
+            "ADMIN_PASSWORD is missing or shorter than 8 characters, the admin panel stays disabled",
+        );
+        return None;
+    }
+
+    let allowed_ips: Vec<String> = std::env::var("ADMIN_ALLOWED_IPS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    if allowed_ips.is_empty() {
+        logs::warn(
+            "admin",
+            "ADMIN_ALLOWED_IPS is empty, the panel is reachable from loopback only",
+        );
+    } else {
+        logs::info(
+            "admin",
+            format!("panel restricted to loopback plus {}", allowed_ips.join(", ")),
+        );
+    }
+
+    Some(AdminConfig {
+        password,
+        allowed_ips,
+        trust_forwarded_for: std::env::var("ADMIN_TRUST_FORWARDED_FOR")
+            .is_ok_and(|value| value == "true"),
+    })
+}
+
+fn oauth_config() -> Option<OAuthConfig> {
+    let client_id = std::env::var("DISCORD_CLIENT_ID").ok().filter(|v| !v.is_empty());
+    let client_secret = std::env::var("DISCORD_CLIENT_SECRET")
+        .ok()
+        .filter(|v| !v.is_empty());
+    let redirect_uri = std::env::var("DISCORD_OAUTH_REDIRECT")
+        .ok()
+        .filter(|v| !v.is_empty());
+
+    match (client_id, client_secret, redirect_uri) {
+        (Some(client_id), Some(client_secret), Some(redirect_uri)) => {
+            logs::info("account", "Discord login enabled for the user space");
+            Some(OAuthConfig {
+                client_id,
+                client_secret,
+                redirect_uri,
+            })
+        }
+        _ => {
+            logs::warn(
+                "account",
+                "Discord OAuth is not fully configured, the user space stays in signed-out mode",
+            );
+            None
+        }
+    }
+}
+
+fn session_secret() -> Option<Vec<u8>> {
+    let raw = std::env::var("ADMIN_SESSION_SECRET").ok()?;
+    let raw = raw.trim();
+    if raw.len() < 16 {
+        if !raw.is_empty() {
+            logs::warn(
+                "admin",
+                "ADMIN_SESSION_SECRET is too short, falling back to a random per-run secret",
+            );
+        }
+        return None;
+    }
+    Some(raw.as_bytes().to_vec())
 }
 
 fn announce_api(licenses: &LicenseService, local: std::net::SocketAddr) {

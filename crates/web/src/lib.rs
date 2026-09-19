@@ -1,16 +1,38 @@
+mod account;
+mod admin;
 mod manifest;
+mod oauth;
 mod page;
+mod render;
+mod session;
 mod statics;
+mod tlshttp;
+mod visits;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use httpd::{serve, Request, Response, ServerConfig};
+use licensing::LicenseService;
 use serde_json::json;
 
 pub use manifest::{human_size, DownloadItem, Manifest};
+pub use oauth::OAuthConfig;
 pub use statics::content_type_of;
+pub use visits::{VisitData, VisitStore};
+
+pub(crate) fn now_secs() -> u64 {
+    httpd::now_secs()
+}
+
+/// Access control for the admin panel: an IP allowlist plus a password.
+#[derive(Clone)]
+pub struct AdminConfig {
+    pub password: String,
+    pub allowed_ips: Vec<String>,
+    pub trust_forwarded_for: bool,
+}
 
 pub struct SiteConfig {
     pub addr: String,
@@ -22,6 +44,11 @@ pub struct SiteConfig {
     pub public_dir: PathBuf,
     pub files_dir: PathBuf,
     pub discord_url: Option<String>,
+    pub licenses: Option<Arc<LicenseService>>,
+    pub admin: Option<AdminConfig>,
+    pub oauth: Option<OAuthConfig>,
+    pub visits: Option<Arc<VisitStore>>,
+    pub session_secret: Arc<Vec<u8>>,
 }
 
 impl SiteConfig {
@@ -37,6 +64,11 @@ impl SiteConfig {
             public_dir: PathBuf::from("public"),
             files_dir: PathBuf::from("files"),
             discord_url: None,
+            licenses: None,
+            admin: None,
+            oauth: None,
+            visits: None,
+            session_secret: Arc::new(licensing::crypto::random_bytes(32)),
         }
     }
 
@@ -74,6 +106,35 @@ impl SiteConfig {
         self.discord_url = url;
         self
     }
+
+    pub fn licenses(mut self, service: Option<Arc<LicenseService>>) -> Self {
+        self.licenses = service;
+        self
+    }
+
+    pub fn admin(mut self, admin: Option<AdminConfig>) -> Self {
+        self.admin = admin;
+        self
+    }
+
+    pub fn oauth(mut self, oauth: Option<OAuthConfig>) -> Self {
+        self.oauth = oauth;
+        self
+    }
+
+    /// Enable visit counting, persisted to `path`.
+    pub fn track_visits(mut self, path: impl Into<PathBuf>) -> Self {
+        self.visits = Some(Arc::new(VisitStore::open(path)));
+        self
+    }
+
+    /// Override the secret used to sign session cookies (32 bytes recommended).
+    pub fn session_secret(mut self, secret: Vec<u8>) -> Self {
+        if !secret.is_empty() {
+            self.session_secret = Arc::new(secret);
+        }
+        self
+    }
 }
 
 pub fn router(config: Arc<SiteConfig>) -> impl Fn(&Request) -> Response + Send + Sync + 'static {
@@ -105,8 +166,24 @@ pub fn spawn(config: SiteConfig) -> std::io::Result<SocketAddr> {
 }
 
 fn route(request: &Request, config: &SiteConfig) -> Response {
+    if request.path == "/admin" || request.path.starts_with("/admin/") {
+        return admin::handle(request, config);
+    }
+
+    if request.path == "/account" || request.path.starts_with("/account/") {
+        return account::handle(request, config);
+    }
+
     if request.method != "GET" && request.method != "HEAD" {
         return not_found(config);
+    }
+
+    // Count a home-page view once, before static assets can short-circuit it
+    // (an index.html in the public folder is served by `asset` below).
+    if request.method == "GET" && request.path == "/" {
+        if let Some(visits) = &config.visits {
+            visits.record_page("/");
+        }
     }
 
     let manifest = Manifest::load(&config.manifest_path);
@@ -181,7 +258,12 @@ fn download(id: &str, config: &SiteConfig, manifest: &Manifest) -> Response {
     };
 
     match Response::file(&path, statics::content_type_of(&item.file), &item.file) {
-        Some(response) => response,
+        Some(response) => {
+            if let Some(visits) = &config.visits {
+                visits.record_download(&item.id);
+            }
+            response
+        }
         None => not_found(config),
     }
 }
@@ -196,4 +278,80 @@ fn not_found(config: &SiteConfig) -> Response {
             .unwrap_or_else(|| Response::html(404, page::not_found(config))),
         None => Response::html(404, page::not_found(config)),
     }
+}
+
+/// Resolve the client IP, honouring `X-Forwarded-For` only when trusted.
+pub(crate) fn client_ip(request: &Request, trust_forwarded: bool) -> String {
+    if trust_forwarded {
+        if let Some(forwarded) = request.header("x-forwarded-for") {
+            if let Some(first) = forwarded.split(',').next() {
+                let candidate = first.trim();
+                if !candidate.is_empty() {
+                    return candidate.to_string();
+                }
+            }
+        }
+    }
+    request.peer.clone()
+}
+
+pub(crate) fn is_loopback(ip: &str) -> bool {
+    ip == "127.0.0.1" || ip == "::1" || ip.starts_with("127.")
+}
+
+/// Parse `application/x-www-form-urlencoded` request bodies.
+pub(crate) fn parse_form(body: &[u8]) -> std::collections::HashMap<String, String> {
+    let text = String::from_utf8_lossy(body);
+    let mut map = std::collections::HashMap::new();
+    for pair in text.split('&') {
+        if pair.is_empty() {
+            continue;
+        }
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        map.insert(form_decode(key), form_decode(value));
+    }
+    map
+}
+
+/// Read a single parameter out of a raw query string.
+pub(crate) fn query_param(query: &str, name: &str) -> Option<String> {
+    for pair in query.split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if form_decode(key) == name {
+            return Some(form_decode(value));
+        }
+    }
+    None
+}
+
+fn form_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("");
+                match u8::from_str_radix(hex, 16) {
+                    Ok(decoded) => {
+                        out.push(decoded);
+                        i += 3;
+                    }
+                    Err(_) => {
+                        out.push(bytes[i]);
+                        i += 1;
+                    }
+                }
+            }
+            other => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).to_string()
 }

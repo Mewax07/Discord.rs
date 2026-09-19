@@ -9,7 +9,7 @@ A Discord bot and a licence server for the BadOmen products, written in Rust wit
 | `crates/discord` | Discord gateway, REST client, models, components v2, slash command registry |
 | `crates/httpd` | Minimal HTTP/1.1 server: routing, connection cap, rate limit, file streaming |
 | `crates/licensing` | Licence issuing, Ed25519 signing, HWID binding, licence API |
-| `crates/web` | Static site from `public/`, plus manifest driven downloads |
+| `crates/web` | Static site from `public/`, manifest driven downloads, admin panel and Discord-login user space |
 | `crates/badomen_bot` | Tickets, rules, self roles, polls, giveaways, moderation, configuration |
 
 Everything runs in a single process: the bot holds the gateway connection while the download site and the licence API answer on one HTTP port, the site owning the root and the API everything under `/v1`. Give `WEB_ADDR` a different value than `LICENSE_API_ADDR` to split them across two ports instead.
@@ -109,6 +109,40 @@ The hero runs the GhostFibers shader in WebGL2, ported to plain JavaScript in `p
 Edit `public/` with any editor and reload the page, nothing is compiled in. `public/404.html` replaces the built in not found page when present. The shipped `app.js` fetches `/downloads.json` and renders the cards, so adding a release means dropping the file in `files/` and adding an entry to `data/downloads.json`, no restart and no rebuild.
 
 Path traversal is refused on both trees: URL segments containing `..`, a backslash, a colon or a leading dot are rejected outright, and every resolved path is canonicalised then checked to sit inside its root. Downloads stream in 64 KB chunks, so a large launcher never sits in memory. Set `WEB_ENABLED=false` to run the bot without the site.
+
+## Admin panel
+
+The site carries an operator dashboard at `GET /admin`, on the same port as the rest of the site. It summarises visit counters, licence statistics and the full licence table, and lets you act on any licence without touching the bearer API.
+
+Two barriers guard it, both required:
+
+- **IP allowlist.** The panel answers only from loopback plus the IPs in `ADMIN_ALLOWED_IPS` (comma separated). Any other address gets a plain `404`, so the panel never reveals that it exists. Behind a trusted reverse proxy, set `ADMIN_TRUST_FORWARDED_FOR=true` to read the client from `X-Forwarded-For`.
+- **Password.** `ADMIN_PASSWORD` (8+ characters) unlocks a signed, HTTP-only session cookie that lasts twelve hours. A missing or too-short password leaves the whole panel disabled; `ADMIN_PANEL_ENABLED=false` disables it explicitly.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /admin` | login form, then the dashboard once authenticated |
+| `POST /admin/login` | check the password, set the session cookie |
+| `POST /admin/logout` | clear the session |
+| `GET /admin/data` | JSON feed the dashboard renders (stats, visits, licences) |
+| `POST /admin/license/{prefix}/revoke` `…/restore` `…/reset-hwid` `…/assign` | licence actions, keyed by licence prefix |
+
+**Visits** are simple counters (total, per day, per download id), persisted to `data/visits.json`, with no IP or per-visitor tracking. Delete the file to reset them.
+
+## User space
+
+`GET /account` lets a customer sign in with Discord and see every licence bound to their account, with the machines activated under each key (hardware id tail, first and last seen). Identity is a Discord OAuth `identify` login: the site never sees a password and keeps only a signed cookie holding the Discord id.
+
+Create an application at <https://discord.com/developers>, add the callback to *OAuth2 → Redirects*, then set `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` and `DISCORD_OAUTH_REDIRECT` (for example `https://badomen.org/account/callback`). Without all three, `/account` stays in a signed-out state and simply invites the visitor to configure it. Licences appear for a user when their `owner_id` matches the Discord id, which is what `/license create owner:@user` and giveaways already set.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /account` | the licences and machines for the signed-in user, or a Discord login prompt |
+| `GET /account/login` | start the OAuth flow (CSRF-protected by a signed state cookie) |
+| `GET /account/callback` | exchange the code, read the profile, open the session |
+| `POST /account/logout` | sign out |
+
+Admin and account cookies are signed with `ADMIN_SESSION_SECRET`. Leave it empty and a fresh random secret is generated on every run, which logs everyone out on restart; set a stable 16+ character value to keep sessions across restarts. Preview the whole thing locally with `cargo run -p web --example preview` (admin password `preview`, a demo licence seeded on start).
 
 ## Licence API
 

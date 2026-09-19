@@ -317,8 +317,11 @@ version = "1.0.0"
 dependencies = [
  "httpd",
  "licensing",
+ "ring",
+ "rustls",
  "serde",
  "serde_json",
+ "webpki-roots",
 ]
 
 [[package]]
