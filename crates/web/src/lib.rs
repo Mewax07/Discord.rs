@@ -57,9 +57,9 @@ impl SiteConfig {
         Self {
             addr: addr.into(),
             tagline: format!("Official downloads for {site_name}"),
-            footer: format!("{site_name} · downloads served directly by the bot"),
+            footer: format!("{site_name} - telechargements servis directement par le bot"),
             site_name,
-            accent: "#8B5CF6".to_string(),
+            accent: "#cc56dd".to_string(),
             manifest_path: PathBuf::from("data/downloads.json"),
             public_dir: PathBuf::from("public"),
             files_dir: PathBuf::from("files"),

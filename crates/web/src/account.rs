@@ -45,8 +45,10 @@ fn login(config: &SiteConfig) -> Response {
         STATE_TTL,
     );
 
-    Response::redirect(&oauth.authorize_url(&state))
-        .header("Set-Cookie", session::set_cookie(STATE_COOKIE, &state, STATE_TTL))
+    Response::redirect(&oauth.authorize_url(&state)).header(
+        "Set-Cookie",
+        session::set_cookie(STATE_COOKIE, &state, STATE_TTL),
+    )
 }
 
 fn callback(request: &Request, config: &SiteConfig) -> Response {
@@ -98,7 +100,10 @@ fn callback(request: &Request, config: &SiteConfig) -> Response {
     );
 
     Response::redirect("/account")
-        .header("Set-Cookie", session::set_cookie(USER_COOKIE, &cookie_value, SESSION_TTL))
+        .header(
+            "Set-Cookie",
+            session::set_cookie(USER_COOKIE, &cookie_value, SESSION_TTL),
+        )
         .header("Set-Cookie", session::clear_cookie(STATE_COOKIE))
 }
 
@@ -108,53 +113,72 @@ fn logout() -> Response {
 
 fn page(request: &Request, config: &SiteConfig) -> Response {
     if config.oauth.is_none() {
-        return Response::html(200, shell(config, &unconfigured_body()));
+        return Response::html(200, shell(config, &unconfigured_body(), None));
     }
 
     match session_user(request, config) {
-        Some(user) => Response::html(200, shell(config, &account_body(config, &user))),
-        None => Response::html(200, shell(config, &signed_out_body(config))),
+        Some(user) => Response::html(
+            200,
+            shell(config, &account_body(config, &user), Some(&user)),
+        ),
+        None => Response::html(200, shell(config, &signed_out_body(config), None)),
     }
 }
 
 fn error_page(config: &SiteConfig, message: &str) -> Response {
     let body = format!(
-        r#"<div class="panel center">
-      <h1>Connexion Discord</h1>
-      <p class="error">{message}</p>
-      <a class="btn" href="/account/login">Réessayer</a>
-    </div>"#,
+        r#"<div class="auth-panel">
+  <div class="auth-icon error">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <span class="eyebrow" data-i18n="account.error.eyebrow">ERREUR / CONNEXION</span>
+  <h1 data-i18n="account.error.title">Un souci est survenu</h1>
+  <p class="muted">{message}</p>
+  <a class="btn primary" href="/account/login" data-i18n="account.error.retry">Reessayer</a>
+</div>"#,
         message = escape_html(message),
     );
-    Response::html(400, shell(config, &body))
+    Response::html(400, shell(config, &body, None))
 }
 
 fn unconfigured_body() -> String {
-    r#"<div class="panel center">
-      <h1>Espace utilisateur</h1>
-      <p class="muted">La connexion Discord n'est pas encore configurée sur ce serveur.</p>
-    </div>"#
+    r#"<div class="auth-panel">
+  <div class="auth-icon">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.98 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.62 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.62 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.06 4.65a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.15.62.7 1.06 1.34 1.06H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03Z" stroke="currentColor" stroke-width="1.4"/></svg>
+  </div>
+  <span class="eyebrow" data-i18n="account.unconfigured.eyebrow">ESPACE UTILISATEUR</span>
+  <h1 data-i18n="account.unconfigured.title">Bientot disponible</h1>
+  <p class="muted" data-i18n="account.unconfigured.text">La connexion Discord n'est pas encore configuree sur ce serveur. Reviens un peu plus tard.</p>
+  <a class="btn ghost" href="/" data-i18n="account.unconfigured.home">Retour a l'accueil</a>
+</div>"#
         .to_string()
 }
 
 fn signed_out_body(config: &SiteConfig) -> String {
     format!(
-        r#"<div class="panel center">
-      <h1>Vos licences BadOmen</h1>
-      <p class="muted">Connectez-vous avec Discord pour voir vos licences {site} et les machines qui leur sont attribuées.</p>
-      <a class="btn discord" href="/account/login">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.5A19 19 0 0 0 15.5 3l-.24.5a14 14 0 0 1 4.2 2.1A15.8 15.8 0 0 0 12 4.6 15.8 15.8 0 0 0 4.5 5.6a14 14 0 0 1 4.2-2.1L8.5 3A19 19 0 0 0 3.7 4.5C1.4 8 .8 11.4 1.1 14.8a19 19 0 0 0 5.8 2.9l.7-1a12 12 0 0 1-1.9-.9l.5-.3a13.6 13.6 0 0 0 11.6 0l.5.3c-.6.4-1.2.7-1.9.9l.7 1a19 19 0 0 0 5.8-2.9c.4-4-.6-7.4-2.3-10.3ZM8.4 12.9c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Zm7.2 0c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Z"/></svg>
-        Se connecter avec Discord
-      </a>
-      <p class="fineprint">Nous lisons seulement votre identifiant Discord (scope <code>identify</code>).</p>
-    </div>"#,
+        r#"<div class="auth-panel">
+  <div class="auth-icon discord">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.5A19 19 0 0 0 15.5 3l-.24.5a14 14 0 0 1 4.2 2.1A15.8 15.8 0 0 0 12 4.6 15.8 15.8 0 0 0 4.5 5.6a14 14 0 0 1 4.2-2.1L8.5 3A19 19 0 0 0 3.7 4.5C1.4 8 .8 11.4 1.1 14.8a19 19 0 0 0 5.8 2.9l.7-1a12 12 0 0 1-1.9-.9l.5-.3a13.6 13.6 0 0 0 11.6 0l.5.3c-.6.4-1.2.7-1.9.9l.7 1a19 19 0 0 0 5.8-2.9c.4-4-.6-7.4-2.3-10.3ZM8.4 12.9c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Zm7.2 0c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Z"/></svg>
+  </div>
+  <span class="eyebrow" data-i18n="account.signedOut.eyebrow">ESPACE UTILISATEUR / CONNEXION</span>
+  <h1 data-i18n-html="account.signedOut.title">Vos licences <em>{site}</em></h1>
+  <p class="muted" data-i18n="account.signedOut.text">Connectez-vous avec Discord pour retrouver vos licences, vos cles et les machines qui leur sont associees. Aucun mot de passe, aucune donnee partagee au-dela de votre identifiant.</p>
+  <a class="btn primary discord" href="/account/login">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.3 4.5A19 19 0 0 0 15.5 3l-.24.5a14 14 0 0 1 4.2 2.1A15.8 15.8 0 0 0 12 4.6 15.8 15.8 0 0 0 4.5 5.6a14 14 0 0 1 4.2-2.1L8.5 3A19 19 0 0 0 3.7 4.5C1.4 8 .8 11.4 1.1 14.8a19 19 0 0 0 5.8 2.9l.7-1a12 12 0 0 1-1.9-.9l.5-.3a13.6 13.6 0 0 0 11.6 0l.5.3c-.6.4-1.2.7-1.9.9l.7 1a19 19 0 0 0 5.8-2.9c.4-4-.6-7.4-2.3-10.3ZM8.4 12.9c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Zm7.2 0c-.9 0-1.7-.9-1.7-1.9s.8-1.9 1.7-1.9 1.7.9 1.7 1.9-.8 1.9-1.7 1.9Z"/></svg>
+    <span data-i18n="account.signedOut.button">Se connecter avec Discord</span>
+  </a>
+  <p class="fineprint" data-i18n-html="account.signedOut.fine">Nous lisons uniquement votre identifiant Discord (<code>identify</code>).</p>
+</div>"#,
         site = escape_html(&config.site_name),
     )
 }
 
 fn account_body(config: &SiteConfig, user: &Value) -> String {
     let id = user.get("id").and_then(Value::as_str).unwrap_or("");
-    let name = user.get("name").and_then(Value::as_str).unwrap_or("Utilisateur");
+    let name = user
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("Utilisateur");
     let avatar = user.get("avatar").and_then(Value::as_str).unwrap_or("");
 
     let licenses = config
@@ -163,36 +187,99 @@ fn account_body(config: &SiteConfig, user: &Value) -> String {
         .map(|service| service.for_owner(id))
         .unwrap_or_default();
 
+    let now = crate::now_secs();
+
+    let active = licenses
+        .iter()
+        .filter(|l| !l.revoked && (l.is_lifetime() || l.remaining(now).map_or(false, |s| s > 0)))
+        .count();
+    let expired = licenses.len().saturating_sub(active);
+    let machines: usize = licenses.iter().map(|l| l.activations.len()).sum();
+
     let cards = if licenses.is_empty() {
-        r#"<div class="panel"><p class="muted">Aucune licence n'est associée à ce compte Discord pour le moment. Si vous venez d'en recevoir une, patientez ou contactez le support.</p></div>"#.to_string()
+        r#"<div class="empty-state">
+  <div class="empty-icon">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M4 7.5 12 12l8-4.5M12 12v9" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  </div>
+  <h3 data-i18n="account.empty.title">Aucune licence pour le moment</h3>
+  <p class="muted" data-i18n="account.empty.text">Aucune licence n'est associee a ce compte Discord. Si tu viens d'en recevoir une, patiente quelques minutes ou contacte le support.</p>
+  <a class="btn ghost" href="/#products" data-i18n="account.empty.offers">Voir les offres</a>
+</div>"#
+            .to_string()
     } else {
-        licenses.iter().map(license_card).collect::<Vec<_>>().join("\n")
+        licenses
+            .iter()
+            .map(license_card)
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     format!(
-        r#"<div class="bar">
-      <div class="who">
-        {avatar}
-        <div>
-          <strong>{name}</strong>
-          <span class="muted">Discord ID {id}</span>
-        </div>
-      </div>
-      <form method="post" action="/account/logout"><button class="ghost" type="submit">Déconnexion</button></form>
+        r#"<section class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <span class="eyebrow" data-i18n="account.hero.eyebrow">ESPACE UTILISATEUR / TABLEAU DE BORD</span>
+  <h1 data-i18n-html="account.hero.hello" data-v-name="{name}">Bonjour, <em>{name}</em></h1>
+  <p class="hero-sub" data-i18n="account.hero.sub">Toutes vos licences {site} et les machines activees, reunies au meme endroit.</p>
+</section>
+
+<section class="stats">
+  <article class="stat">
+    <div class="stat-icon mint">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M9 12.5 11 14.5 15 10M12 3l7 4v10l-7 4-7-4V7l7-4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-    <h1>Vos licences</h1>
-    <p class="muted count">{count} licence(s) · les machines listées sont celles activées avec chaque clé.</p>
-    <div class="grid">
-      {cards}
-    </div>"#,
-        avatar = if avatar.is_empty() {
-            String::new()
-        } else {
-            format!("<img class=\"avatar\" src=\"{}\" alt=\"\" width=\"48\" height=\"48\">", escape_html(avatar))
-        },
+    <div class="stat-body">
+      <strong>{total}</strong>
+      <span data-i18n="account.stat.total">Licence(s) au total</span>
+    </div>
+  </article>
+  <article class="stat">
+    <div class="stat-icon violet">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="stat-body">
+      <strong>{active}</strong>
+      <span data-i18n="account.stat.active">Active(s)</span>
+    </div>
+  </article>
+  <article class="stat">
+    <div class="stat-icon amber">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/></svg>
+    </div>
+    <div class="stat-body">
+      <strong>{expired}</strong>
+      <span data-i18n="account.stat.expired">Expiree(s) / revoquee(s)</span>
+    </div>
+  </article>
+  <article class="stat">
+    <div class="stat-icon mint">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>
+    <div class="stat-body">
+      <strong>{machines}</strong>
+      <span data-i18n="account.stat.machines">Machine(s) activee(s)</span>
+    </div>
+  </article>
+</section>
+
+<section class="licenses">
+  <div class="section-head">
+    <div>
+      <span class="eyebrow" data-i18n="account.section.eyebrow">VOS CLES / DETAIL</span>
+      <h2 data-i18n="account.section.title">Licences et machines</h2>
+    </div>
+    <p class="muted" data-i18n="account.section.text">Les machines listees sont celles activees avec chaque cle. Une cle ne peut etre active que sur un nombre limite d'appareils.</p>
+  </div>
+  <div class="grid">
+    {cards}
+  </div>
+</section>"#,
         name = escape_html(name),
-        id = escape_html(id),
-        count = licenses.len(),
+        site = escape_html(&config.site_name),
+        total = licenses.len(),
+        active = active,
+        expired = expired,
+        machines = machines,
+        cards = cards,
     )
 }
 
@@ -200,33 +287,90 @@ fn license_card(license: &License) -> String {
     let now = crate::now_secs();
     let status = license.status(now).as_str();
 
-    let expiry = if license.revoked {
-        "Révoquée".to_string()
+    let (status_label, status_class) = match status {
+        "active" => ("Active", "active"),
+        "unused" => ("Non utilisee", "unused"),
+        "expired" => ("Expiree", "expired"),
+        "revoked" => ("Revoquee", "revoked"),
+        _ => (status, "unused"),
+    };
+    let status_key = format!("status.{status_class}");
+
+    // Chaque libelle porte sa cle et ses variables brutes : le runtime i18n
+    // les remet en forme dans la langue choisie sans nouvel aller-retour.
+    let expiry_main;
+    let expiry_main_attrs;
+    let expiry_sub;
+    let expiry_sub_attrs;
+
+    if license.revoked {
+        expiry_main = "Acces revoque".to_string();
+        expiry_main_attrs = " data-i18n=\"account.expiry.revoked\"".to_string();
+        expiry_sub = "Contacte le support si c'est une erreur.".to_string();
+        expiry_sub_attrs = " data-i18n=\"account.expiry.revokedSub\"".to_string();
     } else if license.is_lifetime() {
-        "Licence à vie".to_string()
+        expiry_main = "Licence a vie".to_string();
+        expiry_main_attrs = " data-i18n=\"account.expiry.lifetime\"".to_string();
+        expiry_sub = "Aucune expiration prevue.".to_string();
+        expiry_sub_attrs = " data-i18n=\"account.expiry.lifetimeSub\"".to_string();
     } else {
         match license.remaining(now) {
-            Some(0) | None => "Expirée".to_string(),
-            Some(secs) => format!(
-                "Expire dans {} · le {}",
-                human_duration(secs),
-                license.expires_at.map(human_date).unwrap_or_default()
-            ),
+            Some(0) | None => {
+                expiry_main = "Expiree".to_string();
+                expiry_main_attrs = " data-i18n=\"account.expiry.expired\"".to_string();
+            }
+            Some(secs) => {
+                expiry_main = format!("Expire dans {}", human_duration(secs));
+                expiry_main_attrs = format!(" data-i18n=\"account.expiry.expiresIn\" data-dur=\"{secs}\"");
+            }
         }
+
+        match license.expires_at {
+            Some(date) => {
+                let label = human_date(date);
+                expiry_sub_attrs = format!(
+                    " data-i18n=\"account.expiry.on\" data-v-date=\"{}\"",
+                    escape_html(&label)
+                );
+                expiry_sub = format!("Le {label}");
+            }
+            None => {
+                expiry_sub = String::new();
+                expiry_sub_attrs = String::new();
+            }
+        }
+    }
+
+    let used = license.activations.len();
+    let allowed = license.max_activations;
+    let pct = if allowed == 0 {
+        0
+    } else {
+        ((used as f32 / allowed as f32) * 100.0).min(100.0) as u32
     };
+    let full_class = if used >= allowed as usize { "full" } else { "" };
 
     let machines = if license.activations.is_empty() {
-        r#"<p class="muted">Aucune machine activée.</p>"#.to_string()
+        r#"<div class="empty-machines">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span data-i18n="account.machine.none">Aucune machine activee pour le moment.</span>
+        </div>"#
+            .to_string()
     } else {
         let rows = license
             .activations
             .iter()
             .map(|activation| {
                 format!(
-                    r#"<li>
-              <span class="mono">💻 {hwid}</span>
-              <span class="muted">activée le {first} · vue le {last}</span>
-            </li>"#,
+                    r#"<li class="machine">
+  <div class="machine-icon">
+    <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+  </div>
+  <div class="machine-body">
+    <code class="machine-hwid">{hwid}</code>
+    <span class="machine-meta" data-i18n="account.machine.meta" data-v-first="{first}" data-v-last="{last}">Activee le {first} - vue le {last}</span>
+  </div>
+</li>"#,
                     hwid = escape_html(&short_hwid(&activation.hwid)),
                     first = escape_html(&human_date(activation.first_seen)),
                     last = escape_html(&human_date(activation.last_seen)),
@@ -238,27 +382,50 @@ fn license_card(license: &License) -> String {
     };
 
     format!(
-        r#"<article class="panel license">
-      <div class="license-head">
-        <div>
-          <h2>{product}</h2>
-          <span class="muted">{plan} · clé <code>{prefix}…</code></span>
-        </div>
-        <span class="pill {status}">{status}</span>
-      </div>
-      <p class="expiry">{expiry}</p>
-      <div class="machine-block">
-        <div class="machine-title">Machines <span class="muted">({used}/{allowed})</span></div>
-        {machines}
-      </div>
-    </article>"#,
+        r#"<article class="license-card">
+  <header class="license-head">
+    <div class="license-title">
+      <h3>{product}</h3>
+      <span class="license-plan">{plan} <span data-i18n="account.license.key">cle</span> <code>{prefix}...</code></span>
+    </div>
+    <span class="pill {status_class}"><i></i><span data-i18n="{status_key}">{status_label}</span></span>
+  </header>
+
+  <div class="license-meta">
+    <div class="meta-block">
+      <span class="meta-label" data-i18n="account.label.status">STATUT</span>
+      <strong class="meta-value"{expiry_main_attrs}>{expiry_main}</strong>
+      <small class="meta-sub"{expiry_sub_attrs}>{expiry_sub}</small>
+    </div>
+    <div class="meta-block">
+      <span class="meta-label" data-i18n="account.label.machines">MACHINES</span>
+      <strong class="meta-value">{used} / {allowed}</strong>
+      <div class="progress {full_class}"><i style="width:{pct}%"></i></div>
+    </div>
+  </div>
+
+  <div class="machine-block">
+    <div class="machine-head">
+      <span class="meta-label" data-i18n="account.label.devices">APPAREILS ASSOCIES</span>
+    </div>
+    {machines}
+  </div>
+</article>"#,
         product = escape_html(&license.product),
         plan = escape_html(&license.plan),
         prefix = escape_html(&license.key_prefix),
-        status = escape_html(status),
-        expiry = escape_html(&expiry),
-        used = license.activations.len(),
-        allowed = license.max_activations,
+        status_class = status_class,
+        status_key = status_key,
+        status_label = status_label,
+        expiry_main = escape_html(&expiry_main),
+        expiry_main_attrs = expiry_main_attrs,
+        expiry_sub = escape_html(&expiry_sub),
+        expiry_sub_attrs = expiry_sub_attrs,
+        used = used,
+        allowed = allowed,
+        pct = pct,
+        full_class = full_class,
+        machines = machines,
     )
 }
 
@@ -266,76 +433,102 @@ fn short_hwid(hwid: &str) -> String {
     if hwid.len() <= 14 {
         hwid.to_string()
     } else {
-        format!("…{}", &hwid[hwid.len() - 12..])
+        format!("...{}", &hwid[hwid.len() - 12..])
     }
 }
 
-fn shell(config: &SiteConfig, body: &str) -> String {
+fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> String {
+    let topbar_right = match user {
+        Some(u) => {
+            let name = u
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("Utilisateur");
+            let avatar = u.get("avatar").and_then(Value::as_str).unwrap_or("");
+            let avatar_html = if avatar.is_empty() {
+                format!(
+                    "<span class=\"chip-avatar fallback\">{}</span>",
+                    escape_html(
+                        &name
+                            .chars()
+                            .next()
+                            .unwrap_or('U')
+                            .to_string()
+                            .to_uppercase()
+                    )
+                )
+            } else {
+                format!(
+                    "<img class=\"chip-avatar\" src=\"{}\" alt=\"\" width=\"32\" height=\"32\" loading=\"lazy\">",
+                    escape_html(avatar)
+                )
+            };
+            format!(
+                r#"<div class="profile-chip">
+      {avatar}
+      <div class="chip-text">
+        <strong>{name}</strong>
+        <small data-i18n="account.discord">Discord</small>
+      </div>
+    </div>
+    <form method="post" action="/account/logout" class="logout-form">
+      <button class="btn ghost sm" type="submit">
+        <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span data-i18n="common.logout">Deconnexion</span>
+      </button>
+    </form>"#,
+                avatar = avatar_html,
+                name = escape_html(name),
+            )
+        }
+        None => String::new(),
+    };
+
     format!(
         r#"<!doctype html>
 <html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Mon compte · {site}</title>
-<style>{css}</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content='#090909'>
+    <title>Mon compte - {site}</title>
+    <link rel="stylesheet" href="/css/theme.css">
+    <link rel="stylesheet" href="/css/account.css">
+    <script src="/js/lang.js"></script>
+    <script src="/js/i18n.js"></script>
 </head>
-<body>
-<main class="wrap">
-  <nav class="topnav"><a href="/">← {site}</a></nav>
-{body}
-</main>
+<body data-site="{site}" data-year="{year}" data-i18n-title="account.doctitle">
+    <div class="noise" aria-hidden="true"></div>
+    <div class="page">
+        <header class="topbar">
+            <a class="brand" href="/">
+            <span class="brand-mark">
+                <img src="/assets/Logo.png" alt=""/>
+            </span>
+            <span class="brand-text">{site}</span>
+            </a>
+            <div class="topbar-right">
+                <span data-lang-switch></span>
+                {topbar_right}
+            </div>
+        </header>
+        
+        <main class="wrap">
+            {body}
+        </main>
+        
+        <footer class="footer">
+            <span data-i18n="account.footer">(c) {year} {site} - Espace utilisateur</span>
+            <a href="/" data-i18n="common.backToSite">Retour au site</a>
+        </footer>
+    </div>
 </body>
 </html>
 "#,
         site = escape_html(&config.site_name),
-        css = ACCOUNT_CSS,
+        topbar_right = topbar_right,
         body = body,
+        year = 2026,
     )
 }
-
-const ACCOUNT_CSS: &str = r#"
-:root { color-scheme: dark; --accent: #8B5CF6; --discord: #5865F2; --bg: #0d0d11; --surface: #16161c; --line: #26262f; --text: #ececf1; --muted: #9a9aa8; --ok: #34d399; --warn: #fbbf24; --bad: #f87171; }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.55; }
-.wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 72px; }
-a { color: var(--accent); text-decoration: none; }
-.topnav { margin-bottom: 24px; font-size: 0.9rem; }
-.topnav a { color: var(--muted); }
-h1 { font-size: 1.6rem; margin: 0 0 6px; letter-spacing: -0.02em; }
-h2 { font-size: 1.1rem; margin: 0; }
-.muted { color: var(--muted); }
-.count { margin: 0 0 20px; font-size: 0.9rem; }
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
-.who { display: flex; align-items: center; gap: 12px; }
-.who div { display: flex; flex-direction: column; }
-.who span { font-size: 0.8rem; }
-.avatar { border-radius: 50%; border: 1px solid var(--line); }
-button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--text); padding: 8px 15px; font-weight: 600; }
-button.ghost:hover { border-color: var(--accent); }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
-.panel.center { max-width: 460px; margin: 8vh auto 0; text-align: center; }
-.panel.center h1 { margin-bottom: 12px; }
-.grid { display: grid; gap: 16px; }
-.license-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
-.expiry { margin: 0 0 16px; color: #c6c6d2; font-size: 0.92rem; }
-.machine-block { border-top: 1px solid var(--line); padding-top: 14px; }
-.machine-title { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 10px; }
-.machines { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.machines li { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
-.machines .muted { font-size: 0.8rem; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.pill { display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; border: 1px solid var(--line); white-space: nowrap; }
-.pill.active { color: var(--ok); border-color: #1f5c47; }
-.pill.unused { color: var(--muted); }
-.pill.expired { color: var(--warn); border-color: #6b551a; }
-.pill.revoked { color: var(--bad); border-color: #6b2626; }
-.btn { display: inline-flex; align-items: center; gap: 9px; margin-top: 20px; background: var(--accent); color: #fff; padding: 12px 22px; border-radius: 10px; font-weight: 600; }
-.btn.discord { background: var(--discord); }
-.btn:hover { filter: brightness(1.1); }
-.fineprint { margin-top: 18px; font-size: 0.78rem; color: var(--muted); }
-.error { color: var(--bad); }
-@media (max-width: 560px) { .bar { flex-direction: column; align-items: flex-start; } }
-"#;

@@ -97,6 +97,6 @@ fn short_hwid(hwid: &str) -> String {
     if hwid.len() <= 12 {
         hwid.to_string()
     } else {
-        format!("…{}", &hwid[hwid.len() - 10..])
+        format!("...{}", &hwid[hwid.len() - 10..])
     }
 }

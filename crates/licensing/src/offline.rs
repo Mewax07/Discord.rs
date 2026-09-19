@@ -42,3 +42,52 @@ pub fn verify_with_hex_key(
     let key = hex_decode(public_key_hex).ok_or(LicenseError::InvalidToken)?;
     verify(&key, token, hwid, now)
 }
+
+#[derive(Debug, Clone)]
+pub enum Verdict {
+    Valid(TokenPayload),
+    Expired(TokenPayload),
+    GraceClosed(TokenPayload),
+    WrongHardware,
+    Forged,
+}
+
+pub fn inspect(public_key: &[u8], token: &str, hwid: &str, now: u64) -> Verdict {
+    let Some((body, signature)) = token.split_once('.') else {
+        return Verdict::Forged;
+    };
+    let (Some(payload_bytes), Some(signature_bytes)) =
+        (base64url_decode(body), base64url_decode(signature))
+    else {
+        return Verdict::Forged;
+    };
+
+    if UnparsedPublicKey::new(&ED25519, public_key)
+        .verify(&payload_bytes, &signature_bytes)
+        .is_err()
+    {
+        return Verdict::Forged;
+    }
+
+    let Ok(payload) = serde_json::from_slice::<TokenPayload>(&payload_bytes) else {
+        return Verdict::Forged;
+    };
+
+    if payload.hwid != hwid {
+        return Verdict::WrongHardware;
+    }
+    if payload.expires_at != 0 && payload.expires_at <= now {
+        return Verdict::Expired(payload);
+    }
+    if payload.offline_until <= now {
+        return Verdict::GraceClosed(payload);
+    }
+    Verdict::Valid(payload)
+}
+
+pub fn inspect_with_hex_key(public_key_hex: &str, token: &str, hwid: &str, now: u64) -> Verdict {
+    match hex_decode(public_key_hex) {
+        Some(key) => inspect(&key, token, hwid, now),
+        None => Verdict::Forged,
+    }
+}

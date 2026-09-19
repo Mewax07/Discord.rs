@@ -1,38 +1,4 @@
-@font-face {
-    font-family: "OpenSans";
-    src: url(/assets/OpenSans-Regular.ttf) format("truetype");
-    font-weight: 400;
-    font-display: swap;
-}
-
-@font-face {
-    font-family: "OpenSans";
-    src: url(/assets/OpenSans-Medium.ttf) format("truetype");
-    font-weight: 600 800;
-    font-display: swap;
-}
-
-@font-face {
-    font-family: "Akony";
-    src: url(/assets/Akony.ttf) format("truetype");
-    font-display: swap;
-}
-
-:root {
-    color-scheme: dark;
-    font-family: "OpenSans", Inter, system-ui, Arial, sans-serif;
-    font-synthesis: none;
-    --bg: #090909;
-    --surface: #121212;
-    --line: rgba(255, 255, 255, 0.085);
-    --line-soft: rgba(255, 255, 255, 0.05);
-    --text: #f2f4f3;
-    --muted: #9ba19f;
-    --muted-2: #6f7774;
-    --mint: rgba(204, 86, 221, 1);
-    --radius: 18px;
-    --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
-}
+/* Palette et polices partagees: /css/theme.css */
 
 * {
     box-sizing: border-box;

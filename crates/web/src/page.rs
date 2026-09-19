@@ -7,7 +7,9 @@ pub fn index(config: &SiteConfig, manifest: &Manifest) -> String {
     let items = manifest.visible();
 
     let cards = if items.is_empty() {
-        String::from("<p class=\"empty\">No download is published yet.</p>")
+        String::from(
+            "<p class=\"empty\" data-i18n=\"fallback.empty\">Aucun telechargement publie pour le moment.</p>",
+        )
     } else {
         items
             .iter()
@@ -45,7 +47,7 @@ fn card(config: &SiteConfig, item: &DownloadItem) -> String {
     let size = item
         .size(&config.files_dir)
         .map(human_size)
-        .unwrap_or_else(|| "unavailable".to_string());
+        .unwrap_or_else(|| "indisponible".to_string());
     let available = item.resolve(&config.files_dir).is_some();
 
     let meta = [
@@ -56,7 +58,7 @@ fn card(config: &SiteConfig, item: &DownloadItem) -> String {
     .into_iter()
     .flatten()
     .collect::<Vec<_>>()
-    .join(" · ");
+    .join(" - ");
 
     let checksum = match &item.sha256 {
         Some(hash) if !hash.is_empty() => format!(
@@ -68,11 +70,13 @@ fn card(config: &SiteConfig, item: &DownloadItem) -> String {
 
     let button = if available {
         format!(
-            "<a class=\"download\" href=\"/d/{id}\">Download</a>",
+            "<a class=\"download\" href=\"/d/{id}\" data-i18n=\"downloads.action\">Telecharger</a>",
             id = escape_html(&item.id)
         )
     } else {
-        String::from("<span class=\"download disabled\">Unavailable</span>")
+        String::from(
+            "<span class=\"download disabled\" data-i18n=\"downloads.unavailable\">Indisponible</span>",
+        )
     };
 
     format!(
@@ -96,9 +100,9 @@ pub fn not_found(config: &SiteConfig) -> String {
     shell(
         config,
         r#"<header>
-      <h1>Not found</h1>
-      <p class="tagline">This page or download does not exist.</p>
-      <div class="actions"><a class="ghost" href="/">Back to downloads</a></div>
+      <h1 data-i18n="fallback.notFound">Page introuvable</h1>
+      <p class="tagline" data-i18n="fallback.notFoundText">Cette page ou ce telechargement n'existe pas.</p>
+      <div class="actions"><a class="ghost" href="/" data-i18n="fallback.back">Retour aux telechargements</a></div>
     </header>"#,
     )
 }
@@ -106,11 +110,13 @@ pub fn not_found(config: &SiteConfig) -> String {
 fn shell(config: &SiteConfig, body: &str) -> String {
     format!(
         r#"<!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
+<script src="/js/lang.js"></script>
+<script src="/js/i18n.js"></script>
 <style>
 :root {{ color-scheme: dark; --accent: {accent}; --bg: #0d0d11; --surface: #16161c; --line: #26262f; --text: #ececf1; --muted: #9a9aa8; }}
 * {{ box-sizing: border-box; }}
@@ -140,7 +146,7 @@ footer {{ margin-top: 56px; color: var(--muted); font-size: 0.8rem; text-align: 
 @media (max-width: 560px) {{ .row {{ flex-direction: column; align-items: flex-start; }} }}
 </style>
 </head>
-<body>
+<body data-site="{title}" data-year="2026">
     {body}
     <footer>{footer}</footer>
 </body>

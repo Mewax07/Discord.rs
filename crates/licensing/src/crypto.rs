@@ -76,6 +76,10 @@ pub fn sha256_hex(input: &str) -> String {
     hex_encode(digest::digest(&digest::SHA256, input.as_bytes()).as_ref())
 }
 
+pub fn sha256_bytes(input: &[u8]) -> String {
+    hex_encode(digest::digest(&digest::SHA256, input).as_ref())
+}
+
 pub fn constant_time_eq(left: &str, right: &str) -> bool {
     let (left, right) = (left.as_bytes(), right.as_bytes());
     if left.len() != right.len() {

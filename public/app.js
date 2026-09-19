@@ -79,9 +79,18 @@ const faIcon = (name, style) => {
     return element;
 };
 
+const t = (key, vars) => (window.I18N ? window.I18N.t(key, vars) : key);
+
+const label = (key) => {
+    const span = document.createElement("span");
+    span.dataset.i18n = key;
+    span.textContent = t(key);
+    return span;
+};
+
 const formatSize = (bytes) => {
     if (typeof bytes !== "number" || bytes <= 0) return null;
-    const units = ["o", "Ko", "Mo", "Go"];
+    const units = window.I18N ? window.I18N.list("downloads.sizeUnits") : ["o", "Ko", "Mo", "Go"];
     let value = bytes;
     let unit = 0;
     while (value >= 1024 && unit < units.length - 1) {
@@ -109,8 +118,9 @@ const checksum = (hash) => {
 
     const copy = node("button");
     copy.type = "button";
-    copy.title = "Copier l'empreinte";
-    copy.setAttribute("aria-label", "Copier l'empreinte SHA-256");
+    copy.title = t("downloads.copyHash");
+    copy.dataset.i18nAttr = "title:downloads.copyHash|aria-label:downloads.copyHashAria";
+    copy.setAttribute("aria-label", t("downloads.copyHashAria"));
     copy.append(faIcon("fa-copy"));
 
     copy.addEventListener("click", async () => {
@@ -136,7 +146,7 @@ const card = (item) => {
 
     const meta = [item.version && `v${item.version}`, formatSize(item.size)]
         .filter(Boolean)
-        .join(" · ");
+        .join(" - ");
     if (meta) body.append(node("p", "download-meta", meta));
     if (item.description) body.append(node("p", null, item.description));
     if (item.sha256) body.append(checksum(item.sha256));
@@ -150,9 +160,9 @@ const card = (item) => {
 
     if (available) {
         action.setAttribute("download", "");
-        action.append(faIcon("fa-download"), document.createTextNode("Télécharger"));
+        action.append(faIcon("fa-download"), label("downloads.action"));
     } else {
-        action.append(faIcon("fa-xmark"), document.createTextNode("Indisponible"));
+        action.append(faIcon("fa-xmark"), label("downloads.unavailable"));
     }
 
     body.append(action);
@@ -160,17 +170,24 @@ const card = (item) => {
     return article;
 };
 
+let shown = [];
+
 const render = (items) => {
+    shown = items;
     list.replaceChildren();
 
     if (!items.length) {
-        list.append(node("p", "muted", "Aucune version n'est publiée pour le moment."));
+        const empty = node("p", "muted", t("downloads.empty"));
+        empty.dataset.i18n = "downloads.empty";
+        list.append(empty);
         count.textContent = "";
+        count.removeAttribute("data-i18n");
         return;
     }
 
-    count.textContent =
-        items.length === 1 ? "1 version disponible" : `${items.length} versions disponibles`;
+    count.textContent = t("downloads.count", { count: items.length });
+    count.dataset.i18n = "downloads.count";
+    count.dataset.vCount = String(items.length);
     items.forEach((item) => list.append(card(item)));
 };
 
@@ -182,13 +199,9 @@ const load = async () => {
         render(Array.isArray(payload.items) ? payload.items : []);
     } catch (error) {
         loading?.remove();
-        list.replaceChildren(
-            node(
-                "p",
-                "muted",
-                "La liste des versions n'a pas pu être chargée. Réessayez dans un instant.",
-            ),
-        );
+        const failed = node("p", "muted", t("downloads.error"));
+        failed.dataset.i18n = "downloads.error";
+        list.replaceChildren(failed);
         console.error("downloads", error);
     }
 };
@@ -267,6 +280,10 @@ nav?.addEventListener("click", (event) => {
 
 toTop?.addEventListener("click", () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+window.I18N?.onChange(() => {
+    if (shown.length) render(shown);
 });
 
 mountShaders();

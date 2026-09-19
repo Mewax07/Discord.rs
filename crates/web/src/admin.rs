@@ -50,7 +50,12 @@ fn ip_allowed(ip: &str, admin: &AdminConfig) -> bool {
 fn is_authed(request: &Request, config: &SiteConfig) -> bool {
     session::cookie(request.header("cookie"), COOKIE)
         .and_then(|token| session::verify(&config.session_secret, token))
-        .and_then(|claims| claims.get("role").and_then(Value::as_str).map(str::to_string))
+        .and_then(|claims| {
+            claims
+                .get("role")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .map(|role| role == "admin")
         .unwrap_or(false)
 }
@@ -63,8 +68,15 @@ fn login(request: &Request, config: &SiteConfig, admin: &AdminConfig) -> Respons
         return Response::html(401, login_page(config, true));
     }
 
-    let token = session::issue(&config.session_secret, json!({ "role": "admin" }), SESSION_TTL);
-    Response::redirect("/admin").header("Set-Cookie", session::set_cookie(COOKIE, &token, SESSION_TTL))
+    let token = session::issue(
+        &config.session_secret,
+        json!({ "role": "admin" }),
+        SESSION_TTL,
+    );
+    Response::redirect("/admin").header(
+        "Set-Cookie",
+        session::set_cookie(COOKIE, &token, SESSION_TTL),
+    )
 }
 
 fn logout() -> Response {
@@ -177,61 +189,113 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
 
 fn login_page(config: &SiteConfig, failed: bool) -> String {
     let error = if failed {
-        "<p class=\"error\">Mot de passe incorrect.</p>"
+        r#"<div class="auth-alert error">
+  <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span data-i18n="admin.login.wrongPassword">Mot de passe incorrect</span>
+</div>"#
     } else {
         ""
     };
 
-    shell(
-        config,
-        "Connexion admin",
-        &format!(
-            r#"<div class="login">
-      <h1>Panneau d'administration</h1>
-      <p class="muted">{site} · accès restreint</p>
-      {error}
-      <form method="post" action="/admin/login">
-        <label>Mot de passe
+    let body = format!(
+        r#"<div class="auth-wrap">
+  <div class="auth-panel">
+    <span data-lang-switch class="auth-lang"></span>
+    <div class="auth-icon">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.6"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.98 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.62 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.62 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.06 4.65a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9c.15.62.7 1.06 1.34 1.06H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03Z" stroke="currentColor" stroke-width="1.4"/></svg>
+    </div>
+    <span class="eyebrow" data-i18n="admin.login.eyebrow">ESPACE ADMIN / RESTREINT</span>
+    <h1 data-i18n="admin.login.title">Panneau d'administration</h1>
+    <p class="muted" data-i18n="admin.login.sub">{site} - acces protege par IP et mot de passe.</p>
+    {error}
+    <form method="post" action="/admin/login" autocomplete="off">
+      <label>
+        <span data-i18n="admin.login.password">Mot de passe</span>
+        <div class="input">
+          <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="4" y="10" width="16" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           <input type="password" name="password" autocomplete="current-password" autofocus required>
-        </label>
-        <button type="submit">Se connecter</button>
-      </form>
-    </div>"#,
-            site = escape_html(&config.site_name),
-        ),
-    )
+        </div>
+      </label>
+      <button class="btn primary" type="submit">
+        <span data-i18n="admin.login.submit">Se connecter</span>
+        <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </form>
+    <p class="fineprint" data-i18n="admin.login.fine">Les tentatives sont journalisees. Toute connexion hors IP autorisee retourne une 404.</p>
+  </div>
+</div>"#,
+        site = escape_html(&config.site_name),
+        error = error,
+    );
+
+    shell(config, "Connexion admin", "admin.doctitle.login", &body)
 }
 
 fn dashboard(config: &SiteConfig) -> String {
-    shell(
-        config,
-        "Panneau admin",
-        &format!(
-            r#"<div class="bar">
-      <h1>{site} · admin</h1>
-      <form method="post" action="/admin/logout"><button class="ghost" type="submit">Déconnexion</button></form>
+    let body = format!(
+        r#"<section class="hero">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <span class="eyebrow" data-i18n="admin.hero.eyebrow">PANNEAU ADMIN / CONSOLE</span>
+  <div class="hero-row">
+    <div>
+      <h1 data-i18n-html="admin.hero.title">Console <em>{site}</em></h1>
+      <p class="hero-sub" data-i18n="admin.hero.sub">Gestion des licences, des machines et du trafic. Les actions sensibles sont confirmees avant execution.</p>
     </div>
-    <section class="cards" id="stats"></section>
-    <section class="panel">
-      <h2>Visites</h2>
-      <div id="visits" class="muted">Chargement…</div>
-    </section>
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Licences</h2>
-        <input id="filter" type="search" placeholder="Filtrer (clé, produit, propriétaire)…">
-      </div>
-      <div id="licenses" class="muted">Chargement…</div>
-    </section>
-    <div id="toast" class="toast" hidden></div>
-    <script>{script}</script>"#,
-            site = escape_html(&config.site_name),
-            script = DASHBOARD_JS,
-        ),
-    )
+    <div class="hero-actions">
+      <span data-lang-switch></span>
+      <span class="live-pill"><i></i><span data-i18n="admin.live">Live</span></span>
+      <form method="post" action="/admin/logout">
+        <button class="btn ghost sm" type="submit">
+          <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="common.logout">Deconnexion</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<section class="cards" id="stats">
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.total">Total</div></div>
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.active">Actives</div></div>
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.unused">Inutilisees</div></div>
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.expired">Expirees</div></div>
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.revoked">Revoquees</div></div>
+  <div class="card skeleton"><div class="n">-</div><div class="l" data-i18n="admin.stat.machines">Machines</div></div>
+</section>
+
+<section class="panel" id="visits-panel">
+  <header class="panel-head">
+    <div>
+      <span class="eyebrow" data-i18n="admin.visits.eyebrow">TRAFIC / 14 JOURS</span>
+      <h2 data-i18n="admin.visits.title">Visites</h2>
+    </div>
+  </header>
+  <div id="visits" class="muted" data-i18n="common.loading">Chargement...</div>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <span class="eyebrow" data-i18n="admin.licenses.eyebrow">INVENTAIRE / LICENCES</span>
+      <h2 data-i18n="admin.licenses.title">Licences</h2>
+    </div>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input id="filter" type="search" data-i18n-attr="placeholder:admin.search" placeholder="Cle, produit, plan, proprietaire...">
+    </div>
+  </header>
+  <div id="licenses" class="muted" data-i18n="common.loading">Chargement...</div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/js/admin.js" defer></script>"#,
+        site = escape_html(&config.site_name),
+    );
+
+    shell(config, "Panneau admin", "admin.doctitle.dashboard", &body)
 }
 
-fn shell(config: &SiteConfig, title: &str, body: &str) -> String {
+fn shell(config: &SiteConfig, title: &str, title_key: &str, body: &str) -> String {
     format!(
         r#"<!doctype html>
 <html lang="fr">
@@ -239,152 +303,29 @@ fn shell(config: &SiteConfig, title: &str, body: &str) -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>{title} · {site}</title>
-<style>{css}</style>
+<meta name="theme-color" content='#090909'>
+<title>{title} - {site}</title>
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/admin.css">
+<script src="/js/lang.js"></script>
+<script src="/js/i18n.js"></script>
 </head>
-<body>
-<main class="wrap">
+<body data-site="{site}" data-year="{year}" data-i18n-title="{title_key}">
+<div class="noise" aria-hidden="true"></div>
+<div class="page">
 {body}
-</main>
+  <footer class="footer">
+    <span data-i18n="admin.footer">(c) {year} {site} - Console admin</span>
+    <a href="/" data-i18n="common.backToSite">Retour au site</a>
+  </footer>
+</div>
 </body>
 </html>
 "#,
         title = escape_html(title),
+        title_key = escape_html(title_key),
         site = escape_html(&config.site_name),
-        css = ADMIN_CSS,
         body = body,
+        year = 2026,
     )
 }
-
-const ADMIN_CSS: &str = r#"
-:root { color-scheme: dark; --accent: #8B5CF6; --bg: #0d0d11; --surface: #16161c; --line: #26262f; --text: #ececf1; --muted: #9a9aa8; --ok: #34d399; --warn: #fbbf24; --bad: #f87171; }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.5; }
-.wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 72px; }
-a { color: var(--accent); }
-h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.02em; }
-h2 { font-size: 1.05rem; margin: 0 0 14px; }
-.muted { color: var(--muted); }
-.bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; gap: 16px; }
-button { font: inherit; cursor: pointer; border-radius: 9px; border: 1px solid var(--line); background: var(--accent); color: #fff; padding: 9px 16px; font-weight: 600; }
-button.ghost { background: transparent; color: var(--text); }
-button.ghost:hover { border-color: var(--accent); }
-button.small { padding: 6px 11px; font-size: 0.8rem; font-weight: 500; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
-.card .n { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; }
-.card .l { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 22px; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
-.panel-head h2 { margin: 0; }
-input[type=search], input[type=password], input[type=text] { font: inherit; background: #0f0f14; border: 1px solid var(--line); color: var(--text); border-radius: 9px; padding: 9px 12px; width: 100%; max-width: 320px; }
-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-th, td { text-align: left; padding: 10px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; border: 1px solid var(--line); }
-.pill.active { color: var(--ok); border-color: #1f5c47; }
-.pill.unused { color: var(--muted); }
-.pill.expired { color: var(--warn); border-color: #6b551a; }
-.pill.revoked { color: var(--bad); border-color: #6b2626; }
-.machines { margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 0.8rem; }
-.machines li { padding: 2px 0; }
-.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.bars { display: flex; align-items: flex-end; gap: 4px; height: 90px; margin-top: 10px; }
-.bars .b { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; opacity: 0.85; }
-.bars .b span { display: block; }
-.dl-list { display: grid; gap: 8px; margin-top: 6px; }
-.dl-list .dl { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed var(--line); padding-bottom: 6px; }
-.login { max-width: 360px; margin: 12vh auto 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 30px; }
-.login h1 { font-size: 1.3rem; }
-.login form { margin-top: 18px; display: grid; gap: 14px; }
-.login label { display: grid; gap: 6px; font-size: 0.85rem; color: var(--muted); }
-.login button { width: 100%; padding: 11px; }
-.error { color: var(--bad); font-size: 0.88rem; margin: 12px 0 0; }
-.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #1f1f28; border: 1px solid var(--line); padding: 12px 18px; border-radius: 12px; font-size: 0.88rem; }
-@media (max-width: 640px) { table, thead, tbody, th, td, tr { display: block; } th { display: none; } td { border: none; padding: 3px 0; } tr { border-bottom: 1px solid var(--line); padding: 12px 0; } }
-"#;
-
-const DASHBOARD_JS: &str = r#"
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-let all = [];
-function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 2600); }
-async function load() {
-  const res = await fetch("/admin/data", { headers: { "Accept": "application/json" } });
-  if (res.status === 401) { location.reload(); return; }
-  const data = await res.json();
-  renderStats(data.stats);
-  renderVisits(data.visits);
-  all = data.licenses || [];
-  renderLicenses();
-}
-function renderStats(s) {
-  const cells = [["Total", s.total], ["Actives", s.active], ["Inutilisées", s.unused], ["Expirées", s.expired], ["Révoquées", s.revoked], ["Machines", s.machines]];
-  document.getElementById("stats").innerHTML = cells.map(([l, n]) => `<div class="card"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
-}
-function renderVisits(v) {
-  const box = document.getElementById("visits");
-  if (v.disabled) { box.textContent = "Suivi des visites désactivé."; return; }
-  const days = v.days || {};
-  const keys = Object.keys(days).sort().slice(-14);
-  const max = Math.max(1, ...keys.map((k) => days[k]));
-  const bars = keys.map((k) => `<div class="b" style="height:${Math.round((days[k] / max) * 100)}%" title="${k}: ${days[k]}"></div>`).join("");
-  const dls = Object.entries(v.downloads || {}).sort((a, b) => b[1] - a[1]);
-  const dlHtml = dls.length ? `<div class="dl-list">${dls.map(([id, n]) => `<div class="dl"><code>${esc(id)}</code><strong>${n}</strong></div>`).join("")}</div>` : '<p class="muted">Aucun téléchargement compté.</p>';
-  box.innerHTML = `
-    <div class="cards">
-      <div class="card"><div class="n">${v.total}</div><div class="l">Visites totales</div></div>
-      <div class="card"><div class="n">${v.today}</div><div class="l">Aujourd'hui</div></div>
-    </div>
-    <p class="muted" style="margin:14px 0 0">14 derniers jours</p>
-    <div class="bars">${bars || '<span class="muted">Pas encore de données.</span>'}</div>
-    <h2 style="margin-top:22px">Téléchargements</h2>
-    ${dlHtml}`;
-}
-function statusPill(s) { return `<span class="pill ${esc(s)}">${esc(s)}</span>`; }
-function renderLicenses() {
-  const q = (document.getElementById("filter").value || "").toLowerCase();
-  const rows = all.filter((l) => !q || [l.key_prefix, l.product, l.plan, l.owner_id].some((f) => String(f ?? "").toLowerCase().includes(q)));
-  if (!rows.length) { document.getElementById("licenses").innerHTML = '<p class="muted">Aucune licence.</p>'; return; }
-  const body = rows.map((l) => {
-    const machines = (l.activations || []).map((a) => `<li>💻 <code>${esc(a.hwid_short)}</code> · vu ${esc(a.last_seen_label)} · ${a.checks} checks</li>`).join("");
-    const owner = l.owner_id ? `<code>${esc(l.owner_id)}</code>` : '<span class="muted">—</span>';
-    const expiry = l.lifetime ? "à vie" : (l.expires_label || "—");
-    const actions = `<div class="row-actions">
-      ${l.revoked ? `<button class="ghost small" onclick="act('${esc(l.key_prefix)}','restore')">Restaurer</button>` : `<button class="ghost small" onclick="act('${esc(l.key_prefix)}','revoke')">Révoquer</button>`}
-      <button class="ghost small" onclick="act('${esc(l.key_prefix)}','reset-hwid')">Reset HWID</button>
-      <button class="ghost small" onclick="assign('${esc(l.key_prefix)}')">Assigner</button>
-    </div>`;
-    return `<tr>
-      <td><code>${esc(l.key_prefix)}</code><br>${statusPill(l.status)}</td>
-      <td>${esc(l.product)}<br><span class="muted">${esc(l.plan)}</span></td>
-      <td>${owner}</td>
-      <td>${l.machines_used}/${l.machines_allowed}${machines ? `<ul class="machines">${machines}</ul>` : ""}</td>
-      <td>${esc(expiry)}<br><span class="muted">${esc(l.created_label)}</span></td>
-      <td>${actions}</td>
-    </tr>`;
-  }).join("");
-  document.getElementById("licenses").innerHTML = `<div style="overflow-x:auto"><table>
-    <thead><tr><th>Clé</th><th>Produit</th><th>Propriétaire</th><th>Machines</th><th>Expiration</th><th>Actions</th></tr></thead>
-    <tbody>${body}</tbody></table></div>`;
-}
-async function act(ref, action, extra) {
-  if (action === "revoke" && !confirm("Révoquer cette licence ?")) return;
-  if (action === "reset-hwid" && !confirm("Réinitialiser les machines liées ?")) return;
-  const res = await fetch(`/admin/license/${encodeURIComponent(ref)}/${action}`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(extra || {})
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { toast(data.message || data.error || "Erreur"); return; }
-  toast("Fait.");
-  await load();
-}
-function assign(ref) {
-  const owner = prompt("ID Discord du propriétaire (vide pour retirer) :", "");
-  if (owner === null) return;
-  act(ref, "assign", { owner_id: owner });
-}
-document.getElementById("filter").addEventListener("input", renderLicenses);
-load();
-setInterval(load, 30000);
-"#;

@@ -1,0 +1,85 @@
+@font-face {
+    font-family: "OpenSans";
+    src: url(/assets/OpenSans-Regular.ttf) format("truetype");
+    font-weight: 400;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "OpenSans";
+    src: url(/assets/OpenSans-Medium.ttf) format("truetype");
+    font-weight: 600 800;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Akony";
+    src: url(/assets/Akony.ttf) format("truetype");
+    font-display: swap;
+}
+
+:root {
+    color-scheme: dark;
+    font-family: "OpenSans", Inter, system-ui, Arial, sans-serif;
+    font-synthesis: none;
+    --bg: #090909;
+    --surface: #121212;
+    --surface-2: #171717;
+    --line: rgba(255, 255, 255, 0.085);
+    --line-soft: rgba(255, 255, 255, 0.05);
+    --text: #f2f4f3;
+    --muted: #9ba19f;
+    --muted-2: #6f7774;
+    --mint: rgba(204, 86, 221, 1);
+    --mint-soft: rgba(204, 86, 221, 0.12);
+    --accent: rgba(204, 86, 221, 1);
+    --on-accent: #07100e;
+    --violet: #c5bdff;
+    --violet-soft: rgba(197, 189, 255, 0.12);
+    --amber: #f0b94a;
+    --amber-soft: rgba(240, 185, 74, 0.12);
+    --red: #f87171;
+    --red-soft: rgba(248, 113, 113, 0.12);
+    --discord: #5865f2;
+    --radius: 18px;
+    --radius-sm: 12px;
+    --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
+}
+
+/* Selecteur de langue, injecte par /js/i18n.js dans [data-lang-switch] */
+.lang-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lang-switch button {
+    appearance: none;
+    border: 0;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    transition:
+        color 0.18s var(--ease),
+        background 0.18s var(--ease);
+}
+
+.lang-switch button:hover {
+    color: var(--text);
+}
+
+.lang-switch button.is-active {
+    background: var(--mint-soft);
+    color: var(--mint);
+}
