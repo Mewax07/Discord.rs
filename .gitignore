@@ -8,6 +8,7 @@
 data/*
 !data/config.example.json
 !data/downloads.example.json
+!data/roulette.example.json
 
 files/*
 !files/.gitkeep

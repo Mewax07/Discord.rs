@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::{
     models::{
-        ApplicationInfo, Channel, CommandDefinition, Member, Message, MessagePayload, NewChannel,
-        RegisteredCommand, Role,
+        ApplicationInfo, Channel, CommandDefinition, Invite, Member, Message, MessagePayload,
+        NewChannel, RegisteredCommand, Role,
     },
     net::HttpClient,
     Result,
@@ -249,6 +249,12 @@ impl RestClient {
 
     pub fn get_guild_member(&self, guild_id: &str, user_id: &str) -> Result<Member> {
         let path = format!("{API}/guilds/{guild_id}/members/{user_id}");
+        let value = self.http.get_json(&path, &self.token)?;
+        Ok(serde_json::from_value(value)?)
+    }
+
+    pub fn get_guild_invites(&self, guild_id: &str) -> Result<Vec<Invite>> {
+        let path = format!("{API}/guilds/{guild_id}/invites");
         let value = self.http.get_json(&path, &self.token)?;
         Ok(serde_json::from_value(value)?)
     }

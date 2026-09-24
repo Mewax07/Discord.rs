@@ -19,6 +19,10 @@ const SESSION_TTL: u64 = 7 * 86_400;
 const STATE_TTL: u64 = 600;
 
 pub fn handle(request: &Request, config: &SiteConfig) -> Response {
+    if request.path == "/account/roulette" || request.path == "/account/roulette/spin" {
+        return crate::roulette::handle(request, config);
+    }
+
     match (request.method.as_str(), request.path.as_str()) {
         ("GET", "/account") | ("GET", "/account/") => page(request, config),
         ("GET", "/account/login") => login(config),
@@ -28,7 +32,7 @@ pub fn handle(request: &Request, config: &SiteConfig) -> Response {
     }
 }
 
-fn session_user(request: &Request, config: &SiteConfig) -> Option<Value> {
+pub(crate) fn session_user(request: &Request, config: &SiteConfig) -> Option<Value> {
     session::cookie(request.header("cookie"), USER_COOKIE)
         .and_then(|token| session::verify(&config.session_secret, token))
 }
@@ -220,6 +224,7 @@ fn account_body(config: &SiteConfig, user: &Value) -> String {
   <span class="eyebrow" data-i18n="account.hero.eyebrow">ESPACE UTILISATEUR / TABLEAU DE BORD</span>
   <h1 data-i18n-html="account.hero.hello" data-v-name="{name}">Bonjour, <em>{name}</em></h1>
   <p class="hero-sub" data-i18n="account.hero.sub">Toutes vos licences {site} et les machines activees, reunies au meme endroit.</p>
+  <a class="btn primary" href="/account/roulette" data-i18n="account.hero.roulette">Tourner la roulette</a>
 </section>
 
 <section class="stats">
@@ -437,7 +442,7 @@ fn short_hwid(hwid: &str) -> String {
     }
 }
 
-fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> String {
+pub(crate) fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> String {
     let topbar_right = match user {
         Some(u) => {
             let name = u

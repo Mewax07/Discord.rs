@@ -12,6 +12,7 @@ use crate::commands::ticket::CATEGORIES;
 use crate::logs::{AuditEntry, Logger};
 use crate::storage::{ConfigStore, GuildConfig, LOG_CONFIG, LOG_KEYS};
 use crate::ui::{self, Theme};
+use crate::util::truncate;
 
 pub struct ConfigCommand {
     pub config: Arc<ConfigStore>,
@@ -97,6 +98,52 @@ impl SlashCommand for ConfigCommand {
                     ),
             )
             .option(
+                CommandOption::group("welcome", "Join and leave announcements")
+                    .option(
+                        CommandOption::subcommand("join-channel", "Channel for join announcements")
+                            .option(
+                                CommandOption::channel("channel", "Target channel")
+                                    .required(true)
+                                    .channel_types(vec![CHANNEL_TYPE_GUILD_TEXT]),
+                            ),
+                    )
+                    .option(
+                        CommandOption::subcommand(
+                            "join-message",
+                            "Message sent on join, {user} and {name} are replaced",
+                        )
+                        .option(
+                            CommandOption::string("text", "Message template").required(true),
+                        ),
+                    )
+                    .option(
+                        CommandOption::subcommand("leave-channel", "Channel for leave announcements")
+                            .option(
+                                CommandOption::channel("channel", "Target channel")
+                                    .required(true)
+                                    .channel_types(vec![CHANNEL_TYPE_GUILD_TEXT]),
+                            ),
+                    )
+                    .option(
+                        CommandOption::subcommand(
+                            "leave-message",
+                            "Message sent on leave, {user} and {name} are replaced",
+                        )
+                        .option(
+                            CommandOption::string("text", "Message template").required(true),
+                        ),
+                    )
+                    .option(
+                        CommandOption::subcommand("disable", "Stop announcing join or leave events")
+                            .option(
+                                CommandOption::string("kind", "Which announcement to stop")
+                                    .required(true)
+                                    .choice("Join", "join")
+                                    .choice("Leave", "leave"),
+                            ),
+                    ),
+            )
+            .option(
                 CommandOption::group("licensing", "Who is allowed to issue licence keys").option(
                     CommandOption::subcommand(
                         "manager-role",
@@ -179,6 +226,7 @@ impl SlashCommand for ConfigCommand {
             (None, Some("view")) => self.view(ctx, guild_id),
             (Some("tickets"), Some(action)) => self.tickets(ctx, guild_id, action),
             (Some("rules"), Some(action)) => self.rules(ctx, guild_id, action),
+            (Some("welcome"), Some(action)) => self.welcome(ctx, guild_id, action),
             (Some("licensing"), Some("manager-role")) => self.manager_role(ctx, guild_id),
             (Some("logs"), Some(action)) => self.logs(ctx, guild_id, action),
             (Some("selfroles"), Some(action)) => self.selfroles(ctx, guild_id, action),
@@ -248,6 +296,8 @@ impl ConfigCommand {
                     cfg.rules.len().to_string()
                 },
             ),
+            ui::kv("Join channel", optional_channel(&cfg.welcome_channel_id)),
+            ui::kv("Leave channel", optional_channel(&cfg.leave_channel_id)),
         ];
 
         let self_roles: Vec<String> = CATALOG
@@ -444,6 +494,82 @@ impl ConfigCommand {
                     guild_id,
                     "Member role",
                     format!("Accepting the rules now grants {}.", role.mention()),
+                )
+            }
+            _ => {
+                ctx.reply_widget_hidden(ui::fail("Unknown action", "This setting does not exist."))
+            }
+        }
+    }
+
+    fn welcome(&self, ctx: &CommandContext, guild_id: &str, action: &str) -> Result<()> {
+        match action {
+            "join-channel" => {
+                let Some(channel) = ctx.option_channel("channel") else {
+                    return ctx.reply_widget_hidden(ui::fail("Not found", "Channel not resolved."));
+                };
+                let id = channel.id.clone();
+                self.config
+                    .update(guild_id, |c| c.welcome_channel_id = Some(id.clone()));
+                self.saved(
+                    ctx,
+                    guild_id,
+                    "Join channel",
+                    format!("New members are now announced in {}.", channel.mention()),
+                )
+            }
+            "join-message" => {
+                let Some(text) = ctx.option_string("text") else {
+                    return ctx
+                        .reply_widget_hidden(ui::fail("Missing input", "A message is required."));
+                };
+                let value = truncate(text, 500);
+                self.config
+                    .update(guild_id, |c| c.welcome_message = Some(value.clone()));
+                self.saved(ctx, guild_id, "Join message", format!("New template: {value}"))
+            }
+            "leave-channel" => {
+                let Some(channel) = ctx.option_channel("channel") else {
+                    return ctx.reply_widget_hidden(ui::fail("Not found", "Channel not resolved."));
+                };
+                let id = channel.id.clone();
+                self.config
+                    .update(guild_id, |c| c.leave_channel_id = Some(id.clone()));
+                self.saved(
+                    ctx,
+                    guild_id,
+                    "Leave channel",
+                    format!("Departing members are now announced in {}.", channel.mention()),
+                )
+            }
+            "leave-message" => {
+                let Some(text) = ctx.option_string("text") else {
+                    return ctx
+                        .reply_widget_hidden(ui::fail("Missing input", "A message is required."));
+                };
+                let value = truncate(text, 500);
+                self.config
+                    .update(guild_id, |c| c.leave_message = Some(value.clone()));
+                self.saved(ctx, guild_id, "Leave message", format!("New template: {value}"))
+            }
+            "disable" => {
+                let Some(kind) = ctx.option_string("kind") else {
+                    return ctx
+                        .reply_widget_hidden(ui::fail("Missing input", "A kind is required."));
+                };
+                match kind {
+                    "join" => self.config.update(guild_id, |c| c.welcome_channel_id = None),
+                    "leave" => self.config.update(guild_id, |c| c.leave_channel_id = None),
+                    _ => {
+                        return ctx
+                            .reply_widget_hidden(ui::fail("Unknown kind", "Use join or leave."))
+                    }
+                }
+                self.saved(
+                    ctx,
+                    guild_id,
+                    "Announcements disabled",
+                    format!("{kind} announcements are now off."),
                 )
             }
             _ => {

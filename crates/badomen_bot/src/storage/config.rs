@@ -78,6 +78,14 @@ pub struct GuildConfig {
     pub rules_updated_at: u64,
     #[serde(default)]
     pub brand: Brand,
+    #[serde(default)]
+    pub welcome_channel_id: Option<String>,
+    #[serde(default)]
+    pub welcome_message: Option<String>,
+    #[serde(default)]
+    pub leave_channel_id: Option<String>,
+    #[serde(default)]
+    pub leave_message: Option<String>,
 }
 
 fn yes() -> bool {
@@ -103,6 +111,10 @@ impl Default for GuildConfig {
             rules_message_id: None,
             rules_updated_at: 0,
             brand: Brand::default(),
+            welcome_channel_id: None,
+            welcome_message: None,
+            leave_channel_id: None,
+            leave_message: None,
         }
     }
 }

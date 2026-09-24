@@ -1,0 +1,20 @@
+{
+  "spin_cost_coins": 50,
+  "free_spin_interval_days": 7,
+  "coin_reward_min": 5,
+  "coin_reward_max": 20,
+  "weight_nothing": 45,
+  "weight_coins": 25,
+  "weight_emote": 15,
+  "weight_cosmetic": 10,
+  "weight_license": 5,
+  "license_weight_7d": 80,
+  "license_weight_14d": 15,
+  "license_weight_30d": 5,
+  "emotes": [
+    { "id": "example_emote", "name": "Emote d'exemple" }
+  ],
+  "cosmetics": [
+    { "id": "example_cosmetic", "name": "Cosmetique d'exemple" }
+  ]
+}

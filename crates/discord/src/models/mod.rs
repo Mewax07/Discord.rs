@@ -3,6 +3,7 @@ mod command;
 mod component;
 mod embed;
 mod interaction;
+mod invite;
 mod message;
 mod payload;
 mod permission;
@@ -28,6 +29,7 @@ pub use interaction::{
     AutocompleteResponse, Interaction, InteractionData, InteractionDataOption, InteractionMember,
     InteractionResponse, InteractionResponseType, InteractionType, ModalResponse, ResolvedData,
 };
+pub use invite::Invite;
 pub use message::{Attachment, Message};
 pub use payload::{
     AllowedMentions, MessagePayload, EPHEMERAL, IS_COMPONENTS_V2, SUPPRESS_EMBEDS,

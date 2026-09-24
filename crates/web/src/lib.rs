@@ -1,9 +1,11 @@
 mod account;
 mod admin;
+mod economy;
 mod manifest;
 mod oauth;
 mod page;
 mod render;
+mod roulette;
 mod session;
 mod statics;
 mod tlshttp;
@@ -15,8 +17,9 @@ use std::sync::Arc;
 
 use httpd::{serve, Request, Response, ServerConfig};
 use licensing::LicenseService;
-use serde_json::json;
+use serde_json::{json, Value};
 
+pub use economy::EconomyStore;
 pub use manifest::{human_size, DownloadItem, Manifest};
 pub use oauth::OAuthConfig;
 pub use statics::content_type_of;
@@ -37,10 +40,12 @@ pub struct AdminConfig {
 pub struct SiteConfig {
     pub addr: String,
     pub site_name: String,
+    pub product: String,
     pub tagline: String,
     pub footer: String,
     pub accent: String,
     pub manifest_path: PathBuf,
+    pub roulette_path: PathBuf,
     pub public_dir: PathBuf,
     pub files_dir: PathBuf,
     pub discord_url: Option<String>,
@@ -48,6 +53,7 @@ pub struct SiteConfig {
     pub admin: Option<AdminConfig>,
     pub oauth: Option<OAuthConfig>,
     pub visits: Option<Arc<VisitStore>>,
+    pub economy: Option<Arc<EconomyStore>>,
     pub session_secret: Arc<Vec<u8>>,
 }
 
@@ -56,11 +62,13 @@ impl SiteConfig {
         let site_name = site_name.into();
         Self {
             addr: addr.into(),
+            product: site_name.clone(),
             tagline: format!("Official downloads for {site_name}"),
             footer: format!("{site_name} - telechargements servis directement par le bot"),
             site_name,
             accent: "#cc56dd".to_string(),
             manifest_path: PathBuf::from("data/downloads.json"),
+            roulette_path: PathBuf::from("data/roulette.json"),
             public_dir: PathBuf::from("public"),
             files_dir: PathBuf::from("files"),
             discord_url: None,
@@ -68,8 +76,28 @@ impl SiteConfig {
             admin: None,
             oauth: None,
             visits: None,
+            economy: None,
             session_secret: Arc::new(licensing::crypto::random_bytes(32)),
         }
+    }
+
+    /// Product name used when the roulette issues a temporary licence key.
+    pub fn product(mut self, value: impl Into<String>) -> Self {
+        self.product = value.into();
+        self
+    }
+
+    /// Path to the roulette's editable prize catalog.
+    pub fn roulette_catalog(mut self, path: impl Into<PathBuf>) -> Self {
+        self.roulette_path = path.into();
+        self
+    }
+
+    /// Attach a shared economy store (coins, spins, cosmetic grants), so the
+    /// same ledger can also be credited by the Discord bot's invite tracker.
+    pub fn economy(mut self, store: Option<Arc<EconomyStore>>) -> Self {
+        self.economy = store;
+        self
     }
 
     pub fn tagline(mut self, value: impl Into<String>) -> Self {
@@ -178,11 +206,14 @@ fn route(request: &Request, config: &SiteConfig) -> Response {
         return not_found(config);
     }
 
-    // Count a home-page view once, before static assets can short-circuit it
-    // (an index.html in the public folder is served by `asset` below).
+    // Count a home-page view once per visitor per day, before static assets
+    // can short-circuit it (an index.html in the public folder is served by
+    // `asset` below). Dedup relies on a short signed cookie, not an IP or a
+    // session table, to match the visit store's no-tracking design.
+    let mut visit_cookie = None;
     if request.method == "GET" && request.path == "/" {
         if let Some(visits) = &config.visits {
-            visits.record_page("/");
+            visit_cookie = track_visit(request, config, visits);
         }
     }
 
@@ -204,14 +235,43 @@ fn route(request: &Request, config: &SiteConfig) -> Response {
     }
 
     if let Some(response) = asset(&request.path, config) {
-        return response;
+        return with_visit_cookie(response, visit_cookie);
     }
 
     if request.path == "/" {
-        return Response::html(200, page::index(config, &manifest));
+        return with_visit_cookie(Response::html(200, page::index(config, &manifest)), visit_cookie);
     }
 
     not_found(config)
+}
+
+/// Record a home-page view for `request` unless it already carries a valid
+/// visit cookie for today, returning the `Set-Cookie` value to send back when
+/// a new view was just counted.
+fn track_visit(request: &Request, config: &SiteConfig, visits: &VisitStore) -> Option<String> {
+    const VISIT_COOKIE: &str = "bo_seen";
+    const VISIT_COOKIE_TTL: u64 = 86_400;
+
+    let today = visits::today(now_secs());
+    let seen_today = session::cookie(request.header("cookie"), VISIT_COOKIE)
+        .and_then(|token| session::verify(&config.session_secret, token))
+        .and_then(|claims| claims.get("d").and_then(Value::as_str).map(str::to_string))
+        .is_some_and(|day| day == today);
+
+    if seen_today {
+        return None;
+    }
+
+    visits.record_page("/");
+    let token = session::issue(&config.session_secret, json!({ "d": today }), VISIT_COOKIE_TTL);
+    Some(session::set_cookie(VISIT_COOKIE, &token, VISIT_COOKIE_TTL))
+}
+
+fn with_visit_cookie(response: Response, cookie: Option<String>) -> Response {
+    match cookie {
+        Some(value) => response.header("Set-Cookie", value),
+        None => response,
+    }
 }
 
 fn listing(config: &SiteConfig, manifest: &Manifest) -> serde_json::Value {

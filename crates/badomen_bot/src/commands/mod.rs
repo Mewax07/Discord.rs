@@ -6,6 +6,7 @@ pub mod poll;
 pub mod rules;
 pub mod selfroles;
 pub mod ticket;
+pub mod welcome;
 
 pub use clear::ClearCommand;
 pub use config::ConfigCommand;
@@ -23,3 +24,4 @@ pub use ticket::{
     TicketCloseModalHandler, TicketCommand, TicketHoldHandler, TicketOpenHandler,
     TicketPanelHandler, TicketService,
 };
+pub use welcome::WelcomeService;

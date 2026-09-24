@@ -19,6 +19,7 @@ use crate::{
         TicketBugBackToVersionHandler, TicketBugOsHandler, TicketBugProductHandler,
         TicketBugVersionHandler, TicketClaimHandler, TicketCloseHandler, TicketCloseModalHandler,
         TicketCommand, TicketHoldHandler, TicketOpenHandler, TicketPanelHandler, TicketService,
+        WelcomeService,
     },
     guard::HomeGuild,
     logs::{AuditEntry, Logger},
@@ -29,11 +30,14 @@ use crate::{
 mod commands;
 mod diagnostics;
 mod guard;
+mod invites;
 mod logs;
 mod scheduler;
 mod storage;
 mod ui;
 mod util;
+
+use invites::InviteService;
 
 pub fn main() {
     install_handler();
@@ -57,6 +61,7 @@ pub fn main() {
     let tickets = Arc::new(TicketStore::open("data/tickets.json"));
     let giveaways = Arc::new(GiveawayStore::open("data/giveaways.json"));
     let polls = Arc::new(PollStore::open("data/polls.json"));
+    let economy = Arc::new(web::EconomyStore::open("data/economy.json"));
     let scheduler = Arc::new(Scheduler::start());
     let logger = Arc::new(Logger::new(rest.clone(), config.clone()));
 
@@ -73,7 +78,16 @@ pub fn main() {
         .expect("Unable to open the licence service"),
     );
 
-    start_http(licenses.clone(), &product);
+    let invites = Arc::new(InviteService::new(
+        rest.clone(),
+        economy.clone(),
+        scheduler.clone(),
+        guild_id.clone(),
+    ));
+    invites.refresh_snapshot(&guild_id);
+    invites.resume_pending();
+
+    start_http(licenses.clone(), economy, &product);
 
     if let Ok(channel_id) = std::env::var("LOGS_CHANNEL_ID") {
         config.update(&guild_id, |c| {
@@ -87,6 +101,11 @@ pub fn main() {
         .get_application_info()
         .expect("Unable to retrieve the application");
     logs::info("startup", format!("application {}", app.id));
+
+    let welcome_service = WelcomeService {
+        config: config.clone(),
+        rest: rest.clone(),
+    };
 
     let ticket_service = TicketService {
         config: config.clone(),
@@ -241,7 +260,11 @@ pub fn main() {
 
     let gw_config = GatewayConfig::new(
         token,
-        intents::GUILDS | intents::GUILD_MESSAGES | intents::MESSAGE_CONTENT,
+        intents::GUILDS
+            | intents::GUILD_MEMBERS
+            | intents::GUILD_INVITES
+            | intents::GUILD_MESSAGES
+            | intents::MESSAGE_CONTENT,
     )
     .with_presence(
         "BadOmen On Top!",
@@ -265,6 +288,18 @@ pub fn main() {
             Ok(Event::Ready) => logs::ready("gateway", "connected and listening"),
             Ok(Event::GuildCreate { id, name }) => {
                 home.enforce_membership(&rest, &id, name.as_deref())
+            }
+            Ok(Event::GuildMemberAdd { guild_id, user }) => {
+                if home.owns(Some(&guild_id)) && !user.bot {
+                    welcome_service.announce_join(&guild_id, &user);
+                    invites.handle_join(&guild_id, &user);
+                }
+            }
+            Ok(Event::GuildMemberRemove { guild_id, user }) => {
+                if home.owns(Some(&guild_id)) && !user.bot {
+                    welcome_service.announce_leave(&guild_id, &user);
+                    invites.handle_leave(&user.id);
+                }
             }
             Ok(Event::InteractionCreate(interaction)) => {
                 if home.accepts(&interaction) {
@@ -290,7 +325,7 @@ pub fn main() {
     logs::info("shutdown", "stopped cleanly");
 }
 
-fn start_http(licenses: Arc<LicenseService>, product: &str) {
+fn start_http(licenses: Arc<LicenseService>, economy: Arc<web::EconomyStore>, product: &str) {
     let api_addr =
         std::env::var("LICENSE_API_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
     let web_addr = std::env::var("WEB_ADDR").unwrap_or_else(|_| api_addr.clone());
@@ -327,7 +362,7 @@ fn start_http(licenses: Arc<LicenseService>, product: &str) {
         return;
     }
 
-    let site = Arc::new(site_config(&web_addr, product, licenses.clone()));
+    let site = Arc::new(site_config(&web_addr, product, licenses.clone(), economy));
     if let Err(e) = web::prepare(&site) {
         logs::error("website", format!("cannot prepare the files folder: {e}"));
     }
@@ -370,17 +405,25 @@ fn start_http(licenses: Arc<LicenseService>, product: &str) {
     }
 }
 
-fn site_config(addr: &str, product: &str, licenses: Arc<LicenseService>) -> SiteConfig {
+fn site_config(
+    addr: &str,
+    product: &str,
+    licenses: Arc<LicenseService>,
+    economy: Arc<web::EconomyStore>,
+) -> SiteConfig {
     let mut config = SiteConfig::new(
         addr,
         std::env::var("SITE_NAME").unwrap_or_else(|_| product.to_string()),
     )
+    .product(product.to_string())
     .public(std::env::var("WEB_PUBLIC_DIR").unwrap_or_else(|_| "public".to_string()))
     .files(std::env::var("WEB_FILES_DIR").unwrap_or_else(|_| "files".to_string()))
     .manifest("data/downloads.json")
+    .roulette_catalog("data/roulette.json")
     .discord(std::env::var("DISCORD_INVITE_URL").ok())
     .licenses(Some(licenses))
     .track_visits("data/visits.json")
+    .economy(Some(economy))
     .admin(admin_config())
     .oauth(oauth_config());
 

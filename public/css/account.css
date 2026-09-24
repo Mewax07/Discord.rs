@@ -231,6 +231,11 @@ code {
 .btn.ghost {
     background: rgba(255, 255, 255, 0.04);
 }
+.btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
 
 /* ============== HERO ============== */
 .hero {
@@ -704,6 +709,20 @@ code {
 .auth-panel .btn {
     margin-top: 4px;
 }
+/* ============== ROULETTE OUTCOME ============== */
+.roulette-outcome {
+    padding: 18px 24px;
+    margin: 20px 0;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--mint-soft);
+}
+.roulette-outcome p {
+    margin: 6px 0 0;
+    font-size: 15px;
+    font-weight: 700;
+}
+
 .fineprint {
     margin-top: 18px;
     color: var(--muted-2);
