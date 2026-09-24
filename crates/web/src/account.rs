@@ -117,15 +117,15 @@ fn logout() -> Response {
 
 fn page(request: &Request, config: &SiteConfig) -> Response {
     if config.oauth.is_none() {
-        return Response::html(200, shell(config, &unconfigured_body(), None));
+        return Response::html(200, shell(config, &unconfigured_body(), None, None));
     }
 
     match session_user(request, config) {
         Some(user) => Response::html(
             200,
-            shell(config, &account_body(config, &user), Some(&user)),
+            shell(config, &account_body(config, &user), Some(&user), Some("licenses")),
         ),
-        None => Response::html(200, shell(config, &signed_out_body(config), None)),
+        None => Response::html(200, shell(config, &signed_out_body(config), None, None)),
     }
 }
 
@@ -142,7 +142,7 @@ fn error_page(config: &SiteConfig, message: &str) -> Response {
 </div>"#,
         message = escape_html(message),
     );
-    Response::html(400, shell(config, &body, None))
+    Response::html(400, shell(config, &body, None, None))
 }
 
 fn unconfigured_body() -> String {
@@ -219,55 +219,21 @@ fn account_body(config: &SiteConfig, user: &Value) -> String {
     };
 
     format!(
-        r#"<section class="hero">
-  <div class="hero-glow" aria-hidden="true"></div>
+        r#"<section class="page-head">
   <span class="eyebrow" data-i18n="account.hero.eyebrow">ESPACE UTILISATEUR / TABLEAU DE BORD</span>
   <h1 data-i18n-html="account.hero.hello" data-v-name="{name}">Bonjour, <em>{name}</em></h1>
-  <p class="hero-sub" data-i18n="account.hero.sub">Toutes vos licences {site} et les machines activees, reunies au meme endroit.</p>
-  <a class="btn primary" href="/account/roulette" data-i18n="account.hero.roulette">Tourner la roulette</a>
+  <p class="lead" data-i18n="account.hero.sub">Toutes vos licences {site} et les machines activees, reunies au meme endroit.</p>
 </section>
 
 <section class="stats">
-  <article class="stat">
-    <div class="stat-icon mint">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M9 12.5 11 14.5 15 10M12 3l7 4v10l-7 4-7-4V7l7-4Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="stat-body">
-      <strong>{total}</strong>
-      <span data-i18n="account.stat.total">Licence(s) au total</span>
-    </div>
-  </article>
-  <article class="stat">
-    <div class="stat-icon violet">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </div>
-    <div class="stat-body">
-      <strong>{active}</strong>
-      <span data-i18n="account.stat.active">Active(s)</span>
-    </div>
-  </article>
-  <article class="stat">
-    <div class="stat-icon amber">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M12 8v4l3 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/></svg>
-    </div>
-    <div class="stat-body">
-      <strong>{expired}</strong>
-      <span data-i18n="account.stat.expired">Expiree(s) / revoquee(s)</span>
-    </div>
-  </article>
-  <article class="stat">
-    <div class="stat-icon mint">
-      <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 20h8M12 16v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-    </div>
-    <div class="stat-body">
-      <strong>{machines}</strong>
-      <span data-i18n="account.stat.machines">Machine(s) activee(s)</span>
-    </div>
-  </article>
+  <article class="stat"><span class="stat-label" data-i18n="account.stat.total">Licence(s) au total</span><strong>{total}</strong></article>
+  <article class="stat"><span class="stat-label" data-i18n="account.stat.active">Active(s)</span><strong>{active}</strong></article>
+  <article class="stat"><span class="stat-label" data-i18n="account.stat.expired">Expiree(s) / revoquee(s)</span><strong>{expired}</strong></article>
+  <article class="stat"><span class="stat-label" data-i18n="account.stat.machines">Machine(s) activee(s)</span><strong>{machines}</strong></article>
 </section>
 
-<section class="licenses">
-  <div class="section-head">
+<section class="block">
+  <div class="block-head">
     <div>
       <span class="eyebrow" data-i18n="account.section.eyebrow">VOS CLES / DETAIL</span>
       <h2 data-i18n="account.section.title">Licences et machines</h2>
@@ -442,7 +408,12 @@ fn short_hwid(hwid: &str) -> String {
     }
 }
 
-pub(crate) fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> String {
+pub(crate) fn shell(
+    config: &SiteConfig,
+    body: &str,
+    user: Option<&Value>,
+    active: Option<&str>,
+) -> String {
     let topbar_right = match user {
         Some(u) => {
             let name = u
@@ -489,6 +460,22 @@ pub(crate) fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> St
         None => String::new(),
     };
 
+    let nav = if user.is_some() {
+        let tab = |key: &str, href: &str, i18n: &str, label: &str| {
+            format!(
+                r#"<a class="tab{on}" href="{href}" data-i18n="{i18n}">{label}</a>"#,
+                on = if active == Some(key) { " is-active" } else { "" },
+            )
+        };
+        format!(
+            r#"<nav class="tabs" aria-label="Espace utilisateur">{}{}</nav>"#,
+            tab("licenses", "/account", "account.nav.licenses", "Licences"),
+            tab("roulette", "/account/roulette", "account.nav.roulette", "Roulette"),
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         r#"<!doctype html>
 <html lang="fr">
@@ -519,6 +506,7 @@ pub(crate) fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> St
             </div>
         </header>
         
+        {nav}
         <main class="wrap">
             {body}
         </main>
@@ -533,6 +521,7 @@ pub(crate) fn shell(config: &SiteConfig, body: &str, user: Option<&Value>) -> St
 "#,
         site = escape_html(&config.site_name),
         topbar_right = topbar_right,
+        nav = nav,
         body = body,
         year = 2026,
     )

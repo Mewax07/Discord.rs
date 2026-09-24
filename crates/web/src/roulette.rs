@@ -8,7 +8,7 @@ use std::path::Path;
 
 use httpd::{escape_html, Request, Response};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use licensing::IssueRequest;
 
@@ -146,32 +146,6 @@ pub fn handle(request: &Request, config: &SiteConfig) -> Response {
     }
 }
 
-fn spin(request: &Request, config: &SiteConfig) -> Response {
-    let Some(user) = session_user(request, config) else {
-        return Response::redirect("/account");
-    };
-    let Some(economy) = &config.economy else {
-        return Response::redirect("/account/roulette");
-    };
-    let id = user.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-    let catalog = Catalog::load(&config.roulette_path);
-    let now = now_secs();
-
-    let Some(hwid) = latest_hwid(config, &id) else {
-        return page(request, config, None);
-    };
-
-    if economy
-        .try_spend_spin(&id, catalog.spin_cost_coins, catalog.free_spin_interval_days * 86_400, now)
-        .is_err()
-    {
-        return page(request, config, None);
-    }
-
-    let outcome = roll(config, economy, &catalog, &id, &hwid, now);
-    page(request, config, Some(outcome))
-}
-
 fn roll(
     config: &SiteConfig,
     economy: &crate::economy::EconomyStore,
@@ -289,6 +263,113 @@ fn random_u64() -> u64 {
     u64::from_le_bytes(buf)
 }
 
+struct View {
+    has_hwid: bool,
+    can_spin: bool,
+    free_in: u64,
+}
+
+fn view(economy: &UserEconomy, catalog: &Catalog, has_hwid: bool, now: u64) -> View {
+    let free_ready = economy.next_free_spin_at <= now;
+    View {
+        has_hwid,
+        can_spin: has_hwid && (free_ready || economy.coins >= catalog.spin_cost_coins),
+        free_in: economy.next_free_spin_at.saturating_sub(now),
+    }
+}
+
+fn wants_json(request: &Request) -> bool {
+    request
+        .header("accept")
+        .is_some_and(|value| value.contains("application/json"))
+}
+
+fn deny(request: &Request, config: &SiteConfig, reason: &str) -> Response {
+    if wants_json(request) {
+        Response::json(403, &json!({ "ok": false, "reason": reason }))
+    } else {
+        page(request, config, None)
+    }
+}
+
+fn spin(request: &Request, config: &SiteConfig) -> Response {
+    let Some(user) = session_user(request, config) else {
+        if wants_json(request) {
+            return Response::json(401, &json!({ "ok": false, "reason": "auth" }));
+        }
+        return Response::redirect("/account");
+    };
+    let Some(economy) = &config.economy else {
+        return deny(request, config, "unavailable");
+    };
+    let id = user.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+    let catalog = Catalog::load(&config.roulette_path);
+    let now = now_secs();
+
+    let Some(hwid) = latest_hwid(config, &id) else {
+        return deny(request, config, "hwid");
+    };
+
+    if economy
+        .try_spend_spin(
+            &id,
+            catalog.spin_cost_coins,
+            catalog.free_spin_interval_days * 86_400,
+            now,
+        )
+        .is_err()
+    {
+        return deny(request, config, "funds");
+    }
+
+    let outcome = roll(config, economy, &catalog, &id, &hwid, now);
+
+    if wants_json(request) {
+        let snapshot = economy.snapshot(&id);
+        let state = view(&snapshot, &catalog, true, now);
+        return Response::json(
+            200,
+            &json!({
+                "ok": true,
+                "outcome": outcome_json(&outcome),
+                "coins": snapshot.coins,
+                "spins": snapshot.spins_done,
+                "free_in": state.free_in,
+                "can_spin": state.can_spin,
+            }),
+        );
+    }
+
+    page(request, config, Some(outcome))
+}
+
+fn outcome_json(outcome: &Outcome) -> Value {
+    match outcome {
+        Outcome::Nothing => json!({ "kind": "nothing" }),
+        Outcome::Coins(amount) => json!({ "kind": "coins", "amount": amount }),
+        Outcome::Item { kind, name } => json!({ "kind": kind, "name": name }),
+        Outcome::License { days, key } => json!({ "kind": "license", "days": days, "key": key }),
+    }
+}
+
+fn pool_json(catalog: &Catalog) -> String {
+    let names = |items: &[CatalogItem]| items.iter().map(|i| i.name.clone()).collect::<Vec<_>>();
+    json!({
+        "coins": [catalog.coin_reward_min, catalog.coin_reward_max],
+        "emotes": names(&catalog.emotes),
+        "cosmetics": names(&catalog.cosmetics),
+        "licenses": [7, 14, 30],
+        "weights": {
+            "nothing": catalog.weight_nothing,
+            "coins": catalog.weight_coins,
+            "emote": if catalog.emotes.is_empty() { 0 } else { catalog.weight_emote },
+            "cosmetic": if catalog.cosmetics.is_empty() { 0 } else { catalog.weight_cosmetic },
+            "license": catalog.weight_license,
+        },
+    })
+    .to_string()
+}
+
 fn page(request: &Request, config: &SiteConfig, outcome: Option<Outcome>) -> Response {
     let Some(user) = session_user(request, config) else {
         return Response::redirect("/account");
@@ -306,172 +387,148 @@ fn page(request: &Request, config: &SiteConfig, outcome: Option<Outcome>) -> Res
         .unwrap_or_default();
     let catalog = Catalog::load(&config.roulette_path);
     let now = now_secs();
-    let has_hwid = latest_hwid(config, &id).is_some();
-    let can_spin = has_hwid
-        && (economy.next_free_spin_at <= now || economy.coins >= catalog.spin_cost_coins);
+    let state = view(&economy, &catalog, latest_hwid(config, &id).is_some(), now);
 
-    Response::html(200, shell(config, &body(name, &economy, &catalog, has_hwid, can_spin, now, outcome), Some(&user)))
+    Response::html(
+        200,
+        shell(
+            config,
+            &body(name, &economy, &catalog, &state, outcome),
+            Some(&user),
+            Some("roulette"),
+        ),
+    )
 }
 
 fn body(
     name: &str,
     economy: &UserEconomy,
     catalog: &Catalog,
-    has_hwid: bool,
-    can_spin: bool,
-    now: u64,
+    state: &View,
     outcome: Option<Outcome>,
 ) -> String {
-    let outcome_banner = outcome.map(outcome_html).unwrap_or_default();
-
-    let free_spin_label = if economy.next_free_spin_at <= now {
-        r#"<span data-i18n="account.roulette.freeNow">Disponible maintenant</span>"#.to_string()
+    let free_label = if state.free_in == 0 {
+        r#"<span data-i18n="account.roulette.freeNow">Disponible</span>"#.to_string()
     } else {
         format!(
-            r#"<span data-i18n="account.roulette.freeIn" data-dur="{secs}">Dans {label}</span>"#,
-            secs = economy.next_free_spin_at - now,
-            label = escape_html(&human_duration(economy.next_free_spin_at - now)),
+            r#"<span data-i18n="account.roulette.freeIn" data-dur="{secs}">{label}</span>"#,
+            secs = state.free_in,
+            label = escape_html(&human_duration(state.free_in)),
         )
     };
 
-    let spin_hint = if !has_hwid {
-        r#"<p class="muted" data-i18n="account.roulette.needHwid">Active une licence sur une machine pour pouvoir tourner la roue.</p>"#.to_string()
-    } else if !can_spin {
-        r#"<p class="muted" data-i18n="account.roulette.cantSpin">Pas de tour gratuit disponible et pas assez de coins.</p>"#.to_string()
+    let hint_html = if !state.has_hwid {
+        r#"<span data-i18n="account.roulette.needHwid">Active une licence sur une machine pour pouvoir tourner la roue.</span>"#
+    } else if !state.can_spin {
+        r#"<span data-i18n="account.roulette.cantSpin">Pas de tour gratuit disponible et pas assez de coins.</span>"#
     } else {
-        String::new()
+        ""
     };
 
-    let cosmetics = if economy.cosmetics.is_empty() {
-        r#"<p class="muted" data-i18n="account.roulette.noneYet">Aucun gain pour le moment.</p>"#.to_string()
-    } else {
-        let rows = economy
-            .cosmetics
-            .iter()
-            .rev()
-            .map(|grant| {
-                let catalog_items = if grant.kind == "emote" {
-                    &catalog.emotes
-                } else {
-                    &catalog.cosmetics
-                };
-                let name = catalog_items
-                    .iter()
-                    .find(|item| item.id == grant.item_id)
-                    .map(|item| item.name.as_str())
-                    .unwrap_or(&grant.item_id);
-                format!(
-                    r#"<li class="machine"><div class="machine-body"><strong>{name}</strong><span class="machine-meta">{kind}</span></div></li>"#,
-                    name = escape_html(name),
-                    kind = escape_html(&grant.kind),
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!(r#"<ul class="machines">{rows}</ul>"#)
-    };
-
-    let catalog_preview = preview(catalog);
+    let result_html = outcome.map(outcome_html).unwrap_or_default();
+    let history = history_html(economy, catalog);
+    let prizes = preview(catalog);
 
     format!(
-        r#"<section class="hero">
-  <div class="hero-glow" aria-hidden="true"></div>
+        r#"<section class="page-head">
   <span class="eyebrow" data-i18n="account.roulette.eyebrow">ROULETTE HEBDOMADAIRE</span>
   <h1 data-i18n-html="account.roulette.hello" data-v-name="{name}">Salut, <em>{name}</em></h1>
-  <p class="hero-sub" data-i18n="account.roulette.sub">Un tour gratuit chaque semaine, ou depense des coins pour retenter ta chance.</p>
+  <p class="lead" data-i18n="account.roulette.sub">Un tour gratuit chaque semaine, ou depense des coins pour retenter ta chance.</p>
 </section>
-
-{outcome_banner}
 
 <section class="stats">
-  <article class="stat">
-    <div class="stat-body">
-      <strong>{coins}</strong>
-      <span data-i18n="account.roulette.coins">Coins</span>
-    </div>
-  </article>
-  <article class="stat">
-    <div class="stat-body">
-      <strong>{spins}</strong>
-      <span data-i18n="account.roulette.spinsDone">Tours joues</span>
-    </div>
-  </article>
-  <article class="stat">
-    <div class="stat-body">
-      <strong>{free_spin_label}</strong>
-      <span data-i18n="account.roulette.nextFree">Prochain tour gratuit</span>
-    </div>
-  </article>
+  <article class="stat"><span class="stat-label" data-i18n="account.roulette.coins">Coins</span><strong id="stat-coins">{coins}</strong></article>
+  <article class="stat"><span class="stat-label" data-i18n="account.roulette.spinsDone">Tours joues</span><strong id="stat-spins">{spins}</strong></article>
+  <article class="stat"><span class="stat-label" data-i18n="account.roulette.nextFree">Prochain tour gratuit</span><strong id="stat-free">{free_label}</strong></article>
 </section>
 
-<section class="licenses">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow" data-i18n="account.roulette.spin.eyebrow">TOURNER</span>
-      <h2 data-i18n="account.roulette.spin.title">Lancer la roue</h2>
-    </div>
-    <p class="muted" data-i18n="account.roulette.spin.text" data-v-cost="{cost}">Un tour gratuit par semaine, sinon {cost} coins.</p>
+<section class="panel roulette" id="roulette" data-pool="{pool}" data-cost="{cost}">
+  <div class="reel" id="reel" aria-hidden="true">
+    <div class="reel-strip" id="strip"></div>
+    <div class="reel-marker"></div>
+    <div class="reel-fade left"></div>
+    <div class="reel-fade right"></div>
   </div>
-  <form method="post" action="/account/roulette/spin">
-    <button class="btn primary" type="submit" {disabled}>
-      <span data-i18n="account.roulette.spin.button">Tourner la roue</span>
-    </button>
+  <div class="reel-result" id="result"{result_hidden}>{result_html}</div>
+  <form class="reel-actions" id="spin-form" method="post" action="/account/roulette/spin">
+    <button class="btn primary lg" id="spin-btn" type="submit"{disabled}><span data-i18n="account.roulette.spin.button">Tourner la roue</span></button>
+    <span class="muted" data-i18n="account.roulette.spin.text" data-v-cost="{cost}">Un tour gratuit par semaine, sinon {cost} coins.</span>
   </form>
-  {spin_hint}
+  <p class="reel-hint muted" id="spin-hint">{hint_html}</p>
 </section>
 
-<section class="licenses">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow" data-i18n="account.roulette.prizes.eyebrow">LOTS POSSIBLES</span>
-      <h2 data-i18n="account.roulette.prizes.title">Ce que tu peux gagner</h2>
-    </div>
-  </div>
-  {catalog_preview}
+<section class="block">
+  <div class="block-head"><h2 data-i18n="account.roulette.prizes.title">Ce que tu peux gagner</h2></div>
+  <div class="prizes">{prizes}</div>
 </section>
 
-<section class="licenses">
-  <div class="section-head">
-    <div>
-      <span class="eyebrow" data-i18n="account.roulette.history.eyebrow">HISTORIQUE</span>
-      <h2 data-i18n="account.roulette.history.title">Tes gains cosmetiques</h2>
-    </div>
-  </div>
-  {cosmetics}
+<section class="block">
+  <div class="block-head"><h2 data-i18n="account.roulette.history.title">Tes gains cosmetiques</h2></div>
+  {history}
 </section>
 
-<p class="fineprint"><a href="/account" data-i18n="account.roulette.back">Retour au tableau de bord</a></p>"#,
+<script src="/js/roulette.js" defer></script>"#,
         name = escape_html(name),
         coins = economy.coins,
         spins = economy.spins_done,
-        free_spin_label = free_spin_label,
+        free_label = free_label,
+        pool = escape_html(&pool_json(catalog)),
         cost = catalog.spin_cost_coins,
-        disabled = if can_spin { "" } else { "disabled" },
-        spin_hint = spin_hint,
-        catalog_preview = catalog_preview,
-        cosmetics = cosmetics,
-        outcome_banner = outcome_banner,
+        disabled = if state.can_spin { "" } else { " disabled" },
+        hint_html = hint_html,
+        result_hidden = if result_html.is_empty() { " hidden" } else { "" },
+        result_html = result_html,
+        prizes = prizes,
+        history = history,
+    )
+}
+
+fn history_html(economy: &UserEconomy, catalog: &Catalog) -> String {
+    let rows = economy
+        .cosmetics
+        .iter()
+        .rev()
+        .map(|grant| {
+            let items = if grant.kind == "emote" {
+                &catalog.emotes
+            } else {
+                &catalog.cosmetics
+            };
+            let name = items
+                .iter()
+                .find(|item| item.id == grant.item_id)
+                .map(|item| item.name.as_str())
+                .unwrap_or(&grant.item_id);
+            format!(
+                r#"<li class="prize kind-{kind}"><span class="prize-kind" data-i18n="account.roulette.kind.{kind}">{kind}</span><strong>{name}</strong></li>"#,
+                kind = escape_html(&grant.kind),
+                name = escape_html(name),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        r#"<p class="muted" id="history-empty" data-i18n="account.roulette.noneYet"{hidden}>Aucun gain pour le moment.</p>
+<ul class="prizes" id="history">{rows}</ul>"#,
+        hidden = if economy.cosmetics.is_empty() { "" } else { " hidden" },
     )
 }
 
 fn preview(catalog: &Catalog) -> String {
     let mut entries = vec![
-        r#"<li class="machine"><div class="machine-body"><strong data-i18n="account.roulette.prizes.coins">Coins</strong></div></li>"#.to_string(),
-        r#"<li class="machine"><div class="machine-body"><strong data-i18n="account.roulette.prizes.license">Licence temporaire (7, 14 ou 30 jours)</strong></div></li>"#.to_string(),
+        r#"<div class="prize kind-coins"><span class="prize-kind" data-i18n="account.roulette.kind.coins">Coins</span><strong data-i18n="account.roulette.prizes.coins">Coins</strong></div>"#.to_string(),
+        r#"<div class="prize kind-license"><span class="prize-kind" data-i18n="account.roulette.kind.license">Licence</span><strong data-i18n="account.roulette.prizes.license">Licence temporaire</strong></div>"#.to_string(),
     ];
-    for item in &catalog.emotes {
-        entries.push(format!(
-            r#"<li class="machine"><div class="machine-body"><strong>{}</strong></div></li>"#,
-            escape_html(&item.name)
-        ));
+    for (kind, items) in [("emote", &catalog.emotes), ("cosmetic", &catalog.cosmetics)] {
+        for item in items {
+            entries.push(format!(
+                r#"<div class="prize kind-{kind}"><span class="prize-kind" data-i18n="account.roulette.kind.{kind}">{kind}</span><strong>{}</strong></div>"#,
+                escape_html(&item.name)
+            ));
+        }
     }
-    for item in &catalog.cosmetics {
-        entries.push(format!(
-            r#"<li class="machine"><div class="machine-body"><strong>{}</strong></div></li>"#,
-            escape_html(&item.name)
-        ));
-    }
-    format!(r#"<ul class="machines">{}</ul>"#, entries.join("\n"))
+    entries.join("\n")
 }
 
 fn outcome_html(outcome: Outcome) -> String {
@@ -490,13 +547,5 @@ fn outcome_html(outcome: Outcome) -> String {
             format!(r#" data-v-days="{days}" data-v-key="{}""#, escape_html(key)),
         ),
     };
-
-    format!(
-        r#"<section class="roulette-outcome">
-  <span class="eyebrow" data-i18n="account.roulette.outcome.eyebrow">RESULTAT</span>
-  <p data-i18n="{key}"{vars}></p>
-</section>"#,
-        key = key,
-        vars = vars,
-    )
+    format!(r#"<p data-i18n="{key}"{vars}></p>"#)
 }
